@@ -1,0 +1,15 @@
+import { Stack } from 'expo-router';
+
+import { useTheme } from '@/hooks/use-theme';
+
+export default function AppLayout() {
+  const t = useTheme();
+  // Home ↔ profilo: scorrimento orizzontale; il modal passkey sale dal basso.
+  return (
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: t.background }, animation: 'slide_from_right' }}>
+      <Stack.Screen name="index" />
+      <Stack.Screen name="profile" />
+      <Stack.Screen name="passkey-setup" options={{ presentation: 'modal', animation: 'default' }} />
+    </Stack>
+  );
+}
