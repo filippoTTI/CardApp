@@ -9,6 +9,7 @@ export default function AppLayout() {
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: t.background }, animation: 'slide_from_right' }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="profile" />
+      <Stack.Screen name="card-details" />
       <Stack.Screen name="passkey-setup" options={{ presentation: 'modal', animation: 'default' }} />
     </Stack>
   );
