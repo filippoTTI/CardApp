@@ -52,12 +52,19 @@ function pickBalance(contatori: ApiContatore[]): CardBalance | undefined {
   return undefined;
 }
 
+/** Testo nel campo "Dati" della card che la identifica come gift card (il gestionale non ha un tipo apposito). */
+const GIFT_MARKER = 'GIFT';
+
+function isGift(dati: string | null): boolean {
+  return dati?.trim().toUpperCase() === GIFT_MARKER;
+}
+
 /**
- * Aspetto della card ricavato dai contatori: con il vecchio contatore postpagata (tipo 2) è postpagata,
- * con un importo in euro è prepagata, altrimenti (punti, sconto, nessun saldo) standard.
- * Le gift card non sono distinguibili dai dati.
+ * Aspetto della card: gift se il campo "Dati" vale GIFT; poi dai contatori: con il vecchio contatore postpagata
+ * (tipo 2) è postpagata, con un importo in euro è prepagata, altrimenti (punti, sconto, nessun saldo) standard.
  */
-function pickKind(contatori: ApiContatore[]): CardKind {
+function pickKind(contatori: ApiContatore[], dati: string | null): CardKind {
+  if (isGift(dati)) return 'gift';
   if (contatori.some((k) => k.tipoContatore === 2)) return 'postpaid';
   if (contatori.some((k) => k.tipo === 'euro')) return 'prepaid';
   return 'standard';
@@ -68,7 +75,7 @@ function toCard(c: ApiCard): Card {
   const points = c.contatori.filter((k) => k.tipo === 'punti').reduce((sum, k) => sum + k.valore, 0);
   return {
     id: String(c.idCard),
-    kind: pickKind(c.contatori),
+    kind: pickKind(c.contatori, c.dati),
     code: c.codice,
     balance,
     extraPoints: balance?.type === 'euro' && points !== 0 ? points : undefined,
@@ -76,7 +83,8 @@ function toCard(c: ApiCard): Card {
     blocked: c.bloccata,
     reference: c.riferimento ?? undefined,
     note: c.note ?? undefined,
-    data: c.dati ?? undefined,
+    // il testo che marca la gift card non è un dato da mostrare
+    data: isGift(c.dati) ? undefined : (c.dati ?? undefined),
     masterCode: c.codiceMaster ?? undefined,
     createdAt: c.dataInserimento,
     lastUsedAt: c.ultimoUtilizzo,
