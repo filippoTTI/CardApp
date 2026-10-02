@@ -37,6 +37,13 @@
             "image": "./assets/images/splash-icon.png"
           }
         }
+      ],
+      "expo-secure-store",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.904996924630-644rl8clocqg40ud0fn18sgu67u19gf0"
+        }
       ]
     ],
     "experiments": {

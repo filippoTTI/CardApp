@@ -9,6 +9,7 @@ import { SocialButtons } from '@/components/ui/social-buttons';
 import { TextField } from '@/components/ui/text-field';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
+import { ApiError } from '@/services/api';
 import { signInWithPassword } from '@/services/auth';
 import { isPasskeySupported } from '@/services/passkey';
 
@@ -19,15 +20,20 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string>();
   const [shakeKey, setShakeKey] = useState(0);
+  const [busy, setBusy] = useState(false);
 
   const onLogin = async () => {
-    const ok = await signInWithPassword(email, password);
-    if (!ok) {
-      setError('Password errata');
+    if (busy) return;
+    setBusy(true);
+    try {
+      const { cliente } = await signInWithPassword(email, password);
+      signIn({ skipPasskeyOffer: true, cliente });
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Errore imprevisto');
       setShakeKey((k) => k + 1);
-      return;
+    } finally {
+      setBusy(false);
     }
-    signIn({ skipPasskeyOffer: true });
   };
 
   return (
@@ -47,7 +53,6 @@ export default function LoginScreen() {
         error={error}
         shakeKey={shakeKey}
       />
-      {/* TODO: login reale (vedi services/auth.ts). Provvisorio: entra con qualsiasi dato, tranne la password "errata". */}
       <KeyboardAnchor>
         <Button title="Accedi" onPress={onLogin} />
       </KeyboardAnchor>

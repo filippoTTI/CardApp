@@ -10,8 +10,10 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
 
 function RootStack() {
-  const { isSignedIn } = useAuth();
+  const { isSignedIn, isRestoring } = useAuth();
   const t = useTheme();
+  // Finché non si sa se c'è una sessione salvata resta visibile lo splash (evita il lampo della schermata di login).
+  if (isRestoring) return null;
   return (
     // Tra login e app: stesso scorrimento orizzontale del resto dell'app. Le singole schermate hanno ciascuna il proprio sfondo animato (sincronizzato).
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: t.background }, animation: 'slide_from_right' }}>
