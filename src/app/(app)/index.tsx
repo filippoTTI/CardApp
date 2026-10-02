@@ -1,14 +1,14 @@
 import MaskedView from '@react-native-masked-view/masked-view';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Trash2, UserRound } from 'lucide-react-native';
+import { UserRound } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { InteractionManager, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedBackground } from '@/components/ui/animated-background';
-import { Button } from '@/components/ui/button';
+import { CardsSkeleton } from '@/components/ui/cards-skeleton';
 import { EmptyCards } from '@/components/ui/empty-cards';
 import { EnteringCard } from '@/components/ui/entering-card';
 import { CARD_SHADOW_CLEARANCE, FlipCard } from '@/components/ui/flip-card';
@@ -21,7 +21,7 @@ import { isPasskeySupported } from '@/services/passkey';
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { cards, assignSampleCards, clearCards } = useCards();
+  const { cards, loading } = useCards();
   const { shouldOfferPasskey, dismissPasskeyOffer } = useAuth();
 
   // Le card (SVG, ombre) sono la parte pesante: compaiono a transizione finita, una dopo l'altra, così l'ingresso resta fluido.
@@ -50,18 +50,14 @@ export default function HomeScreen() {
                 {(color) => <UserRound size={28} color={color} strokeWidth={1.9} />}
               </IconButton>
             }
-            right={
-              cards.length > 0 ? (
-                // TODO: SOLO TEST GRAFICI, da rimuovere
-                <IconButton label="Svuota card" bare onPress={clearCards}>
-                  {(color) => <Trash2 size={26} color={color} strokeWidth={1.9} />}
-                </IconButton>
-              ) : undefined
-            }
           />
         </Animated.View>
 
-        {cards.length === 0 ? (
+        {loading ? (
+          <View style={styles.skeleton}>
+            <CardsSkeleton />
+          </View>
+        ) : cards.length === 0 ? (
           <EmptyCards />
         ) : (
           <View style={styles.flex}>
@@ -81,18 +77,11 @@ export default function HomeScreen() {
                 {ready &&
                   cards.map((card, i) => (
                     <EnteringCard key={card.id} index={i}>
-                      <FlipCard card={card} />
+                      <FlipCard card={card} onOpenDetails={() => router.push({ pathname: '/card-details', params: { id: card.id } } as never)} />
                     </EnteringCard>
                   ))}
               </ScrollView>
             </MaskedView>
-          </View>
-        )}
-
-        {/* TODO: SOLO TEST GRAFICI, da rimuovere */}
-        {cards.length === 0 && (
-          <View style={[styles.testButton, { paddingBottom: insets.bottom + 16 }]}>
-            <Button title="Assegna card (test)" variant="social" onPress={assignSampleCards} />
           </View>
         )}
       </SafeAreaView>
@@ -102,7 +91,8 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  testButton: { paddingHorizontal: 24 },
+  // Stesso padding della lista reale, così le card scheletro occupano la posizione delle card vere.
+  skeleton: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
   fade: { height: 36 },
   fadeBottom: { height: 48 },
   opaque: { flex: 1, backgroundColor: '#000' },

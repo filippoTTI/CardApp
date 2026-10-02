@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics';
-import { CreditCard, QrCode as QrIcon } from 'lucide-react-native';
+import { CreditCard, Info, QrCode as QrIcon } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import Animated, {
@@ -13,11 +13,13 @@ import Animated, {
 import Svg, { ClipPath, Defs, Ellipse, G, LinearGradient, Path, Stop } from 'react-native-svg';
 
 import { QrCode } from '@/components/ui/qr-code';
+import { CARD_KIND_LABEL, euroFormat, numberFormat } from '@/constants/format';
 import { useBackgroundFocus } from '@/context/background-focus';
 import { useParallax } from '@/context/parallax';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useTheme } from '@/hooks/use-theme';
 import { buildQrPayload } from '@/services/qr';
-import type { Card, CardKind } from '@/types/card';
+import type { Card, CardBalance, CardKind } from '@/types/card';
 
 /** Spazio da lasciare sotto ogni card: maggiore dell'ombra, così non si sovrappone alla card successiva. */
 export const CARD_SHADOW_CLEARANCE = 28;
@@ -26,8 +28,8 @@ export const CARD_SHADOW_CLEARANCE = 28;
 const CARD_SHIFT = 5;
 
 // Geometria in unità (viewBox) 340 × 214 = proporzioni di una carta di credito.
-const W = 340;
-const H = 214;
+export const W = 340;
+export const H = 214;
 const R = 30; // raggio angoli
 const NW = 28; // semilarghezza dell'incavo centrale (alto e basso)
 const ND = 11; // profondità dell'incavo: meno di mezzo cerchio, spalle morbide
@@ -35,7 +37,7 @@ const NS = 17; // morbidezza delle spalle (quanto la curva si raccorda al bordo)
 const M = 44; // margine extra del disegno per contenere l'ombra
 
 /** Sagoma "biglietto": rettangolo arrotondato con un incavo poco profondo e raccordato al centro di alto e basso. */
-const SHAPE = [
+export const SHAPE = [
   `M ${R} 0`,
   `L ${W / 2 - NW} 0`,
   `C ${W / 2 - NW + NS} 0 ${W / 2 - NS} ${ND} ${W / 2} ${ND}`,
@@ -173,10 +175,8 @@ const PALETTES: Record<CardKind, Record<'light' | 'dark', Palette>> = {
   },
 };
 
-const KIND_LABEL: Record<CardKind, string> = { prepaid: 'Prepagata', postpaid: 'Postpagata', standard: 'Standard', gift: 'Gift card' };
-
-/** Sfondo vettoriale della card: ombra (copie sfalsate della sagoma), colore, curve di livello, piega centrale, bordo. */
-function CardBackground({ palette, id, width }: { palette: Palette; id: string; width: number }) {
+/** Sfondo vettoriale della card: ombra (copie sfalsate della sagoma), colore, curve di livello, piega centrale, bordo (rosso se `alertColor`). */
+function CardBackground({ palette, id, width, alertColor }: { palette: Palette; id: string; width: number; alertColor?: string }) {
   const s = width / W;
   const size = { width: (W + M * 2) * s, height: (H + M * 2) * s };
   return (
@@ -212,7 +212,7 @@ function CardBackground({ palette, id, width }: { palette: Palette; id: string; 
           <Ellipse key={c.rx} cx={W / 2} cy={H / 2} rx={c.rx} ry={c.ry} stroke={palette.line} strokeWidth={1} fill="none" />
         ))}
       </G>
-      <Path d={SHAPE} fill="none" stroke={palette.edge} strokeWidth={1} />
+      <Path d={SHAPE} fill="none" stroke={alertColor ?? palette.edge} strokeWidth={alertColor ? 3 : 1} />
     </Svg>
   );
 }
@@ -228,19 +228,20 @@ function useFaceStyle(offset: number, flip: SharedValue<number>, press: SharedVa
   }));
 }
 
-function formatBalance(balance: Card['balance']): { value: string; unit: string } {
+function formatBalance(balance: CardBalance): { value: string; unit: string } {
   if (balance.type === 'euro') {
-    return { value: new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(balance.amount), unit: 'Saldo' };
+    return { value: euroFormat.format(balance.amount), unit: 'Saldo' };
   }
-  return { value: new Intl.NumberFormat('it-IT').format(balance.amount), unit: 'Punti' };
+  return { value: numberFormat.format(balance.amount), unit: 'Punti' };
 }
 
 /**
  * Card a "biglietto" (stile Wallet): sagoma con incavi, colore pastel, curve di livello,
  * tipografia grande. Da ferma resta dritta; al tocco si gira mostrando il QR generato dal codice.
  */
-export function FlipCard({ card }: { card: Card }) {
+export function FlipCard({ card, onOpenDetails }: { card: Card; onOpenDetails?: () => void }) {
   const palette = PALETTES[card.kind][useColorScheme() === 'dark' ? 'dark' : 'light'];
+  const theme = useTheme();
   const [width, setWidth] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const flip = useSharedValue(0); // 0 = fronte, 1 = retro
@@ -273,7 +274,8 @@ export function FlipCard({ card }: { card: Card }) {
 
   const frontStyle = useFaceStyle(0, flip, press);
   const backStyle = useFaceStyle(180, flip, press);
-  const { value, unit } = formatBalance(card.balance);
+  const formatted = card.balance ? formatBalance(card.balance) : null;
+  const alertColor = card.blocked ? theme.danger : undefined;
   const k = width / W; // scala tipografia in base alla larghezza reale
 
   return (
@@ -288,35 +290,67 @@ export function FlipCard({ card }: { card: Card }) {
         {width > 0 && (
           <>
             {/* FRONTE */}
-            <Animated.View style={[styles.face, frontStyle]}>
-              <CardBackground palette={palette} id={`f${card.id}`} width={width} />
+            {/* Il retro sta sopra il fronte e intercetta i tocchi anche se nascosto: pointerEvents lascia attiva solo la faccia visibile. */}
+            <Animated.View pointerEvents={flipped ? 'none' : 'auto'} style={[styles.face, frontStyle]}>
+              <CardBackground palette={palette} id={`f${card.id}`} width={width} alertColor={alertColor} />
               <View style={[styles.content, { padding: 22 * k }]}>
                 <View style={styles.topRow}>
                   <View style={styles.brandRow}>
                     <CreditCard size={24 * k} color={palette.text} strokeWidth={2} />
-                    <Text style={[styles.brand, { color: palette.text, fontSize: 16 * k }]}>{KIND_LABEL[card.kind]}</Text>
+                    <Text numberOfLines={1} style={[styles.brand, { color: palette.text, fontSize: 16 * k }]}>
+                      {card.issuer?.name ?? CARD_KIND_LABEL[card.kind]}
+                    </Text>
                   </View>
                   <QrIcon size={24 * k} color={palette.text} strokeWidth={2} />
                 </View>
 
                 {/* due livelli: codice in alto a sinistra, saldo in basso a destra */}
                 <View>
-                  <Text style={[styles.code, { color: palette.text, fontSize: 34 * k }]}>{card.code}</Text>
-                  <Text style={[styles.small, { color: palette.textSoft, fontSize: 13 * k }]}>Codice card</Text>
+                  <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.code, { color: palette.text, fontSize: 34 * k }]}>
+                    {card.code}
+                  </Text>
+                  <Text style={[styles.small, { color: palette.textSoft, fontSize: 13 * k }]}>
+                    {`Codice card · ${CARD_KIND_LABEL[card.kind]}`}
+                  </Text>
                 </View>
 
-                <View style={styles.balanceRow}>
-                  <Text style={[styles.big, { color: palette.text, fontSize: 30 * k }]} numberOfLines={1} adjustsFontSizeToFit>
-                    {value}
-                  </Text>
-                  <Text style={[styles.small, { color: palette.textSoft, fontSize: 13 * k }]}>{unit}</Text>
+                <View style={styles.bottomRow}>
+                  <View style={styles.bottomLeft}>
+                    {onOpenDetails && (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Dettagli della card"
+                        hitSlop={10}
+                        onPress={onOpenDetails}
+                        style={[styles.infoButton, { width: 32 * k, height: 32 * k, borderRadius: 16 * k, backgroundColor: `${palette.text}1F` }]}>
+                        <Info size={18 * k} color={palette.text} strokeWidth={2} />
+                      </Pressable>
+                    )}
+                    {card.blocked && (
+                      <View style={[styles.blockedBadge, { backgroundColor: theme.danger, paddingHorizontal: 10 * k, paddingVertical: 4 * k, borderRadius: 999 }]}>
+                        <Text style={[styles.blockedText, { fontSize: 12 * k }]}>BLOCCATA</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.balanceRow}>
+                    {formatted && (
+                      <>
+                        <Text style={[styles.big, { color: palette.text, fontSize: 30 * k }]} numberOfLines={1} adjustsFontSizeToFit>
+                          {formatted.value}
+                        </Text>
+                        <Text style={[styles.small, { color: palette.textSoft, fontSize: 13 * k }]}>
+                          {card.extraPoints ? `${formatted.unit} · ${numberFormat.format(card.extraPoints)} punti` : formatted.unit}
+                        </Text>
+                      </>
+                    )}
+                  </View>
                 </View>
               </View>
             </Animated.View>
 
             {/* RETRO */}
-            <Animated.View style={[styles.face, backStyle]}>
-              <CardBackground palette={palette} id={`b${card.id}`} width={width} />
+            <Animated.View pointerEvents={flipped ? 'auto' : 'none'} style={[styles.face, backStyle]}>
+              <CardBackground palette={palette} id={`b${card.id}`} width={width} alertColor={alertColor} />
               <View style={[styles.content, styles.backContent]}>
                 <View style={{ backgroundColor: palette.qrBox, padding: 10 * k, borderRadius: 16 * k }}>
                   <QrCode value={buildQrPayload(card)} size={112 * k} />
@@ -337,9 +371,14 @@ const styles = StyleSheet.create({
   svg: { position: 'absolute' },
   content: { ...StyleSheet.absoluteFill, justifyContent: 'space-between' },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  brand: { fontWeight: '700', letterSpacing: 0.3 },
-  balanceRow: { alignItems: 'flex-end' },
+  bottomLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  infoButton: { alignItems: 'center', justifyContent: 'center' },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, marginRight: 12 },
+  brand: { fontWeight: '700', letterSpacing: 0.3, flexShrink: 1 },
+  bottomRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  balanceRow: { alignItems: 'flex-end', flex: 1, marginLeft: 12 },
+  blockedBadge: { alignSelf: 'center' },
+  blockedText: { color: '#FFFFFF', fontWeight: '800', letterSpacing: 1 },
   code: { fontWeight: '800', letterSpacing: 3 },
   big: { fontWeight: '800', letterSpacing: -0.5 },
   small: { fontWeight: '500', marginTop: 2 },
