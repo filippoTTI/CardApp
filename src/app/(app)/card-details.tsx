@@ -1,6 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Lock, LockOpen } from 'lucide-react-native';
+import { useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -55,8 +57,32 @@ export default function CardDetailsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { cards } = useCards();
+  const { cards, setBlocked } = useCards();
   const card = cards.find((c) => c.id === id);
+  const [busy, setBusy] = useState(false);
+
+  const changeBlocked = (cardId: string, blocked: boolean) => {
+    setBusy(true);
+    setBlocked(cardId, blocked)
+      .then((message) => {
+        if (message) Alert.alert('Card', message);
+      })
+      .catch((e) => Alert.alert('Card', e instanceof Error ? e.message : 'Errore imprevisto'))
+      .finally(() => setBusy(false));
+  };
+
+  // il blocco chiede conferma; lo sblocco è immediato
+  const toggleBlocked = () => {
+    if (!card || busy) return;
+    if (card.blocked) {
+      changeBlocked(card.id, false);
+      return;
+    }
+    Alert.alert('Blocca card', 'La card non potrà essere usata finché non la sblocchi.', [
+      { text: 'Annulla', style: 'cancel' },
+      { text: 'Blocca', style: 'destructive', onPress: () => changeBlocked(card.id, true) },
+    ]);
+  };
 
   return (
     <View style={styles.flex}>
@@ -141,6 +167,18 @@ export default function CardDetailsScreen() {
             <Animated.View entering={FadeInDown.delay(380).duration(450)}>
               <CardMovements cardId={card.id} />
             </Animated.View>
+            <Animated.View entering={FadeInDown.delay(480).duration(450)}>
+              <Pressable
+                accessibilityRole="button"
+                disabled={busy}
+                onPress={toggleBlocked}
+                style={({ pressed }) => [styles.blockButton, { borderColor: card.blocked ? t.border : t.danger, opacity: pressed || busy ? 0.6 : 1 }]}>
+                {card.blocked ? <LockOpen size={20} color={t.text} strokeWidth={2.2} /> : <Lock size={20} color={t.danger} strokeWidth={2.2} />}
+                <Text style={{ color: card.blocked ? t.text : t.danger, fontSize: 16, fontWeight: '600' }}>
+                  {card.blocked ? 'Sblocca card' : 'Blocca card'}
+                </Text>
+              </Pressable>
+            </Animated.View>
           </ScrollView>
         )}
       </SafeAreaView>
@@ -158,4 +196,5 @@ const styles = StyleSheet.create({
   rowText: { flex: 1, gap: 2 },
   rowValue: { alignItems: 'flex-end', gap: 2, maxWidth: '55%' },
   separator: { height: StyleSheet.hairlineWidth, marginHorizontal: 18 },
+  blockButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, height: 54, borderRadius: Radius.md, borderWidth: 1.5 },
 });

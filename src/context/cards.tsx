@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { useAuth } from '@/context/auth';
-import { fetchCards } from '@/services/cards';
+import { fetchCards, setCardBlocked } from '@/services/cards';
 import type { Card } from '@/types/card';
 
 type CardsContextValue = {
@@ -12,6 +12,8 @@ type CardsContextValue = {
   error?: string;
   /** Ricarica le card dal backend. */
   reload: () => Promise<void>;
+  /** Blocca o sblocca una card sul server e aggiorna l'elenco; ritorna un messaggio se era già nello stato richiesto. */
+  setBlocked: (cardId: string, blocked: boolean) => Promise<string | undefined>;
 };
 
 const CardsContext = createContext<CardsContextValue | null>(null);
@@ -55,7 +57,13 @@ export function CardsProvider({ children }: { children: ReactNode }) {
     };
   }, [isSignedIn]);
 
-  const value = useMemo(() => ({ cards, loading, error, reload }), [cards, loading, error, reload]);
+  const setBlocked = useCallback(async (cardId: string, blocked: boolean) => {
+    const res = await setCardBlocked(cardId, blocked);
+    setCards((prev) => prev.map((c) => (c.id === cardId ? { ...c, blocked: res.blocked } : c)));
+    return res.message;
+  }, []);
+
+  const value = useMemo(() => ({ cards, loading, error, reload, setBlocked }), [cards, loading, error, reload, setBlocked]);
   return <CardsContext.Provider value={value}>{children}</CardsContext.Provider>;
 }
 

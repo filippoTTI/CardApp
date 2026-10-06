@@ -1,4 +1,4 @@
-import { authedGet } from '@/services/auth';
+import { authedGet, authedPost } from '@/services/auth';
 import type { Card, CardBalance, CardCounter, CardKind, CardMovement, CounterType } from '@/types/card';
 
 type ApiContatore = {
@@ -148,4 +148,15 @@ export async function fetchMovements(cardId: string, page: number): Promise<{ mo
       })),
     })),
   };
+}
+
+type ApiBloccaCardResponse = { cod: number; msg?: string; bloccata: boolean; modificata: boolean };
+
+/**
+ * Blocca o sblocca una card del cliente. `message` è valorizzato solo se la card era già nello stato richiesto
+ * (es. "la card è già bloccata."); solleva ApiError se l'operazione non riesce.
+ */
+export async function setCardBlocked(cardId: string, blocked: boolean): Promise<{ blocked: boolean; message?: string }> {
+  const res = await authedPost<ApiBloccaCardResponse>('/App/BloccaCard', { idCard: Number(cardId), blocca: blocked });
+  return { blocked: res.bloccata, message: res.modificata ? undefined : res.msg || undefined };
 }

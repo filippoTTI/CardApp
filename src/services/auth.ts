@@ -146,6 +146,21 @@ export function authedGet<T extends { cod: number; msg?: string }>(path: string)
   return authed((token) => apiGet<T>(path, token));
 }
 
+/** POST autenticato. */
+export function authedPost<T extends { cod: number; msg?: string }>(path: string, body: unknown): Promise<T> {
+  return authed((token) => apiPost<T>(path, body, token));
+}
+
+/**
+ * Cambia la password del cliente, che deve indicare quella attuale. Il server chiude tutte le sessioni e ne apre
+ * una nuova per questo dispositivo, che sostituisce quella corrente. Solleva ApiError (cod 422 se la password
+ * attuale non è corretta).
+ */
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  const res = await authedPost<AuthResponse>('/Auth/CambiaPassword', { passwordAttuale: currentPassword, nuovaPassword: newPassword, device });
+  await store(res);
+}
+
 /**
  * Elimina l'account del cliente sul server (accesso, provider e sessioni) e cancella la sessione locale.
  * Solleva ApiError se l'eliminazione non è riuscita: in quel caso la sessione resta com'è.
