@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { UserRound } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { InteractionManager, ScrollView, StyleSheet, View } from 'react-native';
+import { InteractionManager, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -21,7 +21,13 @@ import { isPasskeySupported } from '@/services/passkey';
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { cards, loading } = useCards();
+  const { cards, loading, reload } = useCards();
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await reload();
+    setRefreshing(false);
+  };
   const { shouldOfferPasskey, dismissPasskeyOffer } = useAuth();
 
   // Le card (SVG, ombre) sono la parte pesante: compaiono a transizione finita, una dopo l'altra, così l'ingresso resta fluido.
@@ -73,7 +79,8 @@ export default function HomeScreen() {
               }>
               <ScrollView
                 contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 56 }, cards.length === 1 && styles.single]}
-                showsVerticalScrollIndicator={false}>
+                showsVerticalScrollIndicator={false}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
                 {ready &&
                   cards.map((card, i) => (
                     <EnteringCard key={card.id} index={i}>

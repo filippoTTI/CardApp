@@ -1,3 +1,4 @@
+import { AppState } from 'react-native';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { useAuth } from '@/context/auth';
@@ -56,6 +57,15 @@ export function CardsProvider({ children }: { children: ReactNode }) {
       setLoading(true);
     };
   }, [isSignedIn]);
+
+  // Al ritorno in primo piano i dati si aggiornano da soli.
+  useEffect(() => {
+    if (!isSignedIn) return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') reload();
+    });
+    return () => sub.remove();
+  }, [isSignedIn, reload]);
 
   const setBlocked = useCallback(async (cardId: string, blocked: boolean) => {
     const res = await setCardBlocked(cardId, blocked);

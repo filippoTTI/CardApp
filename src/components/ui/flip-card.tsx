@@ -13,6 +13,7 @@ import Animated, {
 import Svg, { ClipPath, Defs, Ellipse, G, LinearGradient, Path, Stop } from 'react-native-svg';
 
 import { QrCode } from '@/components/ui/qr-code';
+import { boostBrightness, restoreBrightness } from '@/services/brightness';
 import { CARD_KIND_LABEL, euroFormat, numberFormat } from '@/constants/format';
 import { useBackgroundFocus } from '@/context/background-focus';
 import { useParallax } from '@/context/parallax';
@@ -217,6 +218,8 @@ function CardBackground({ palette, id, width, alertColor }: { palette: Palette; 
   );
 }
 
+const FLIP_MS = 750;
+
 /** Stile di una faccia: prospettiva + rotazione di flip (offset 0 = fronte, 180 = retro). */
 function useFaceStyle(offset: number, flip: SharedValue<number>, press: SharedValue<number>) {
   return useAnimatedStyle(() => ({
@@ -250,9 +253,15 @@ export function FlipCard({ card, onOpenDetails }: { card: Card; onOpenDetails?: 
   const { setCardFlipped } = useBackgroundFocus();
   // Se la card sparisce mentre è girata, lo sfondo deve tornare nitido.
   const flippedRef = useRef(false);
+  const boostTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const boosted = useRef(false);
   useEffect(
     () => () => {
-      if (flippedRef.current) setCardFlipped(false);
+      clearTimeout(boostTimer.current);
+      if (flippedRef.current) {
+        setCardFlipped(false);
+        if (boosted.current) restoreBrightness();
+      }
     },
     [setCardFlipped],
   );
@@ -262,8 +271,19 @@ export function FlipCard({ card, onOpenDetails }: { card: Card; onOpenDetails?: 
     setFlipped(next);
     flippedRef.current = next;
     setCardFlipped(next);
+    // La luminosità sale quando il QR è ormai visibile (verso la fine della rotazione), non al tocco.
+    clearTimeout(boostTimer.current);
+    if (next) {
+      boostTimer.current = setTimeout(() => {
+        boosted.current = true;
+        boostBrightness();
+      }, FLIP_MS - 350);
+    } else if (boosted.current) {
+      boosted.current = false;
+      restoreBrightness();
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    flip.set(withTiming(next ? 1 : 0, { duration: 750, easing: Easing.inOut(Easing.cubic) }));
+    flip.set(withTiming(next ? 1 : 0, { duration: FLIP_MS, easing: Easing.inOut(Easing.cubic) }));
   };
 
   // Parallasse quasi impercettibile: la card si muove di pochi pixel nel verso opposto allo sfondo, per dare profondità.
