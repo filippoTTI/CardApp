@@ -8,7 +8,10 @@
     "scheme": "cardapp",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "bundleIdentifier": "com.cardapp.app"
+      "bundleIdentifier": "com.cardapp.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -49,6 +52,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "0069429e-2eb0-4d13-8894-a3a4af5d8428"
+      }
+    },
+    "owner": "filippoian"
   }
 }
