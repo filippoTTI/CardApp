@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Mail, Phone, ShieldCheck, Trash2, type LucideIcon } from 'lucide-react-native';
+import { ChevronRight, KeyRound, Mail, Phone, ShieldCheck, Trash2, type LucideIcon } from 'lucide-react-native';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -166,6 +166,29 @@ export default function ProfileScreen() {
               </GlassPanel>
             </ParallaxView>
           </Animated.View>
+
+          {user?.accessoPassword && (
+            <Animated.View entering={FadeInDown.delay(600).duration(450)}>
+              <ParallaxView shift={4}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => router.push({ pathname: '/change-password' } as never)}
+                  style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
+                  <GlassPanel radius={Radius.lg}>
+                    <View style={styles.row}>
+                      <View style={[styles.tile, { backgroundColor: '#8B5CF6' }]}>
+                        <KeyRound size={18} color="#FFFFFF" strokeWidth={2.2} />
+                      </View>
+                      <View style={styles.rowText}>
+                        <Text style={{ color: t.text, fontSize: 16, fontWeight: '500' }}>Cambia password</Text>
+                      </View>
+                      <ChevronRight size={20} color={t.textSecondary} />
+                    </View>
+                  </GlassPanel>
+                </Pressable>
+              </ParallaxView>
+            </Animated.View>
+          )}
 
           <Animated.View entering={FadeInDown.delay(800).duration(450)} style={styles.danger}>
             <Pressable
