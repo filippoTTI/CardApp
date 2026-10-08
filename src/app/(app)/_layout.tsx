@@ -11,6 +11,7 @@ export default function AppLayout() {
       <Stack.Screen name="profile" />
       <Stack.Screen name="card-details" />
       <Stack.Screen name="change-password" />
+      <Stack.Screen name="add-account" />
       <Stack.Screen name="passkey-setup" options={{ presentation: 'modal', animation: 'default' }} />
     </Stack>
   );

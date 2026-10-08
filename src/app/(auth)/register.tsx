@@ -1,5 +1,5 @@
-import { Link } from 'expo-router';
-import { useState } from 'react';
+import { Link, useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { AuthScreen, Divider, KeyboardAnchor } from '@/components/ui/auth-screen';
@@ -9,11 +9,18 @@ import { TextField } from '@/components/ui/text-field';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
 import { ApiError } from '@/services/api';
-import { register } from '@/services/auth';
+import { fetchEsercente, listAccounts, register, signInWithPassword } from '@/services/auth';
 
 export default function RegisterScreen() {
   const t = useTheme();
   const { signIn } = useAuth();
+  const router = useRouter();
+  // Il codice esercente arriva dal link/QR e non viene mostrato; il campo compare solo al primo avvio senza link né account.
+  const { cod } = useLocalSearchParams<{ cod?: string }>();
+  const [esercente, setEsercente] = useState<string>();
+  const [hasAccounts, setHasAccounts] = useState<boolean | null>(null);
+  const [codice, setCodice] = useState('');
+  const [info, setInfo] = useState<string>();
   const [nome, setNome] = useState('');
   const [cognome, setCognome] = useState('');
   const [email, setEmail] = useState('');
@@ -22,6 +29,20 @@ export default function RegisterScreen() {
   const [error, setError] = useState<string>();
   const [shakeKey, setShakeKey] = useState(0);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    listAccounts().then((l) => setHasAccounts(l.length > 0));
+  }, []);
+
+  useEffect(() => {
+    if (!cod) return;
+    fetchEsercente(cod)
+      .then((e) => setEsercente(e.ragioneSociale))
+      .catch((e) => setError(e instanceof ApiError ? e.message : 'Errore imprevisto'));
+  }, [cod]);
+
+  const needsCode = !cod && hasAccounts === false;
+  const codEsercente = cod ?? codice;
 
   const onRegister = async () => {
     if (busy) return;
@@ -32,7 +53,13 @@ export default function RegisterScreen() {
     }
     setBusy(true);
     try {
-      const { cliente } = await register({ nome, cognome, email, telefono, password });
+      const { emailDaConfermare } = await register({ nome, cognome, email, telefono, password }, codEsercente);
+      if (emailDaConfermare) {
+        // l'account si attiva dal link ricevuto per email: poi si accede dal login
+        setInfo(`Ti abbiamo inviato un'email a ${email.trim()}: conferma l'account dal link, poi accedi.`);
+        return;
+      }
+      const { cliente } = await signInWithPassword(email, password, codEsercente);
       signIn({ cliente }); // primo accesso: propone la passkey
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Errore imprevisto');
@@ -43,7 +70,8 @@ export default function RegisterScreen() {
   };
 
   return (
-    <AuthScreen title="Crea account" subtitle="Registrati in pochi secondi">
+    <AuthScreen title="Crea account" subtitle={esercente ? `Registrati presso ${esercente}` : 'Registrati in pochi secondi'}>
+      {needsCode && <TextField label="Codice esercente" placeholder="Codice ricevuto dall'esercente" autoCapitalize="characters" autoCorrect={false} value={codice} onChangeText={setCodice} />}
       <TextField label="Nome" placeholder="Mario" autoComplete="given-name" value={nome} onChangeText={setNome} />
       <TextField
         label="Cognome"
@@ -71,8 +99,9 @@ export default function RegisterScreen() {
         error={error}
         shakeKey={shakeKey}
       />
+      {info && <Text style={{ color: t.textSecondary, textAlign: 'center' }}>{info}</Text>}
       <KeyboardAnchor>
-        <Button title="Registrati" onPress={onRegister} />
+        {info ? <Button title="Vai al login" onPress={() => router.replace({ pathname: '/login', params: cod ? { cod } : {} } as never)} /> : <Button title="Registrati" onPress={onRegister} />}
       </KeyboardAnchor>
 
       <Divider label="oppure continua con" />
@@ -80,7 +109,7 @@ export default function RegisterScreen() {
 
       <View style={styles.footer}>
         <Text style={{ color: t.textSecondary }}>Hai già un account? </Text>
-        <Link href="/login" style={{ color: t.primary, fontWeight: '600' }}>
+        <Link href={{ pathname: '/login', params: cod ? { cod } : {} } as never} style={{ color: t.primary, fontWeight: '600' }}>
           Accedi
         </Link>
       </View>

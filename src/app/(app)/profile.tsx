@@ -5,6 +5,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AccountList } from '@/components/ui/account-list';
 import { AnimatedBackground } from '@/components/ui/animated-background';
 import { Avatar3D } from '@/components/ui/avatar-3d';
 import { GlassPanel } from '@/components/ui/glass-panel';
@@ -119,6 +120,7 @@ export default function ProfileScreen() {
             <ParallaxView shift={7} style={styles.hero}>
               <Avatar3D initials={initials} size={112} />
               <Text style={[styles.name, { color: t.text }]}>{fullName}</Text>
+              {user?.esercente ? <Text style={{ color: t.textSecondary, fontSize: 14 }}>{user.esercente}</Text> : null}
               {since && (
                 <GlassPanel radius={999} style={styles.pill}>
                   <Text style={{ color: t.text, fontSize: 13, fontWeight: '500' }}>Membro da {since}</Text>
@@ -166,6 +168,8 @@ export default function ProfileScreen() {
               </GlassPanel>
             </ParallaxView>
           </Animated.View>
+
+          <AccountList />
 
           {user?.accessoPassword && (
             <Animated.View entering={FadeInDown.delay(600).duration(450)}>

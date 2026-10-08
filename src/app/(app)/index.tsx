@@ -1,7 +1,7 @@
 import MaskedView from '@react-native-masked-view/masked-view';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { UserRound } from 'lucide-react-native';
+import { Plus, UserRound } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { InteractionManager, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -48,6 +48,11 @@ export default function HomeScreen() {
             left={
               <IconButton label="Profilo" bare onPress={() => router.push('/profile')}>
                 {(color) => <UserRound size={28} color={color} strokeWidth={1.9} />}
+              </IconButton>
+            }
+            right={
+              <IconButton label="Aggiungi account" bare onPress={() => router.push('/add-account' as never)}>
+                {(color) => <Plus size={28} color={color} strokeWidth={1.9} />}
               </IconButton>
             }
           />

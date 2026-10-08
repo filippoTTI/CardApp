@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 
-import { deleteAccountRemote, refreshSession, restoreSession, signOutRemote, type AuthCliente } from '@/services/auth';
+import { deleteAccountRemote, forgetAccount, refreshSession, restoreSession, signOutRemote, switchAccount as switchAccountRemote, type AuthCliente } from '@/services/auth';
 
 type AuthContextValue = {
   isSignedIn: boolean;
@@ -13,6 +13,10 @@ type AuthContextValue = {
   shouldOfferPasskey: boolean;
   signIn: (options?: { skipPasskeyOffer?: boolean; cliente?: AuthCliente }) => void;
   signOut: () => void;
+  /** Passa a un altro account salvato (chiave esercente + email). Solleva ApiError se l'accesso non riesce. */
+  switchAccount: (key: string) => Promise<void>;
+  /** Dimentica un account salvato; se è quello in uso equivale a uscire. */
+  removeAccount: (key: string) => Promise<void>;
   /** Elimina l'account sul server e chiude la sessione. Solleva ApiError se non riesce. */
   deleteAccount: () => Promise<void>;
   dismissPasskeyOffer: () => void;
@@ -82,6 +86,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setIsSignedIn(false);
   }, []);
+  const switchAccount = useCallback(async (key: string) => {
+    const s = await switchAccountRemote(key);
+    setUser(s.cliente);
+  }, []);
+  const removeAccount = useCallback(
+    async (key: string) => {
+      const wasActive = user?.accountKey === key;
+      await forgetAccount(key);
+      if (wasActive) {
+        setShouldOfferPasskey(false);
+        setUser(null);
+        setIsSignedIn(false);
+      }
+    },
+    [user],
+  );
   const deleteAccount = useCallback(async () => {
     await deleteAccountRemote();
     setShouldOfferPasskey(false);
@@ -95,8 +115,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ isSignedIn, isRestoring, user, shouldOfferPasskey, signIn, signOut, deleteAccount, dismissPasskeyOffer }),
-    [isSignedIn, isRestoring, user, shouldOfferPasskey, signIn, signOut, deleteAccount, dismissPasskeyOffer],
+    () => ({ isSignedIn, isRestoring, user, shouldOfferPasskey, signIn, signOut, switchAccount, removeAccount, deleteAccount, dismissPasskeyOffer }),
+    [isSignedIn, isRestoring, user, shouldOfferPasskey, signIn, signOut, switchAccount, removeAccount, deleteAccount, dismissPasskeyOffer],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

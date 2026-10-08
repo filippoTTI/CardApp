@@ -19,7 +19,8 @@ type CardsContextValue = {
 const CardsContext = createContext<CardsContextValue | null>(null);
 
 export function CardsProvider({ children }: { children: ReactNode }) {
-  const { isSignedIn } = useAuth();
+  const { isSignedIn, user } = useAuth();
+  const accountKey = user?.accountKey;
   const [cards, setCards] = useState<Card[]>([]);
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
@@ -33,7 +34,7 @@ export function CardsProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Le card arrivano dal backend appena si è dentro; all'uscita si svuota tutto.
+  // Le card arrivano dal backend appena si è dentro (e a ogni cambio di account); all'uscita si svuota tutto.
   useEffect(() => {
     if (!isSignedIn) return;
     let active = true;
@@ -55,7 +56,7 @@ export function CardsProvider({ children }: { children: ReactNode }) {
       setError(undefined);
       setLoading(true);
     };
-  }, [isSignedIn]);
+  }, [isSignedIn, accountKey]);
 
   const setBlocked = useCallback(async (cardId: string, blocked: boolean) => {
     const res = await setCardBlocked(cardId, blocked);

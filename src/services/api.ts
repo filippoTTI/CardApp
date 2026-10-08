@@ -17,6 +17,12 @@ function resolveBaseUrl(): string {
 
 export const API_URL = resolveBaseUrl();
 
+/**
+ * Indirizzo del servizio cloud per i clienti (login, registrazione, dati esercente).
+ * Si può forzare con EXPO_PUBLIC_CLOUD_URL (es. http://<pc>:5000 per il servizio locale di test).
+ */
+export const CLOUD_URL = (process.env.EXPO_PUBLIC_CLOUD_URL || 'https://wsclienticloud.skyoneserver.it').replace(/\/+$/, '');
+
 /** Errore restituito dal backend (cod diverso da 0) o di rete (cod -1). */
 export class ApiError extends Error {
   constructor(
@@ -29,11 +35,11 @@ export class ApiError extends Error {
 
 type Envelope = { cod: number; msg?: string };
 
-async function request<T extends Envelope>(method: 'GET' | 'POST', path: string, body?: unknown, accessToken?: string): Promise<T> {
+async function request<T extends Envelope>(method: 'GET' | 'POST', path: string, body?: unknown, accessToken?: string, baseUrl: string = API_URL): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(`${API_URL}${path}`, {
+    const res = await fetch(`${baseUrl}${path}`, {
       method,
       headers: {
         ...(body !== undefined ? { 'Content-Type': 'application/json' } : null),
@@ -64,4 +70,14 @@ export function apiPost<T extends Envelope>(path: string, body: unknown, accessT
 /** GET con access token; stessi errori di apiPost. */
 export function apiGet<T extends Envelope>(path: string, accessToken: string): Promise<T> {
   return request<T>('GET', path, undefined, accessToken);
+}
+
+/** POST JSON al servizio cloud clienti. */
+export function cloudPost<T extends Envelope>(path: string, body: unknown): Promise<T> {
+  return request<T>('POST', path, body, undefined, CLOUD_URL);
+}
+
+/** GET al servizio cloud clienti (senza Authorization: l'eventuale token va nel percorso). */
+export function cloudGet<T extends Envelope>(path: string): Promise<T> {
+  return request<T>('GET', path, undefined, undefined, CLOUD_URL);
 }
