@@ -83,7 +83,7 @@ function MovementRow({ movement, last }: { movement: CardMovement; last: boolean
 }
 
 /** Elenco dei movimenti di una card (ricariche, spese, accrediti), dal più recente, con paginazione. */
-export function CardMovements({ cardId }: { cardId: string }) {
+export function CardMovements({ cardId, refreshKey = 0 }: { cardId: string; refreshKey?: number }) {
   const t = useTheme();
   const [items, setItems] = useState<CardMovement[]>([]);
   const [total, setTotal] = useState(0);
@@ -110,7 +110,7 @@ export function CardMovements({ cardId }: { cardId: string }) {
     return () => {
       active = false;
     };
-  }, [cardId]);
+  }, [cardId, refreshKey]);
 
   const loadMore = async () => {
     if (loading) return;
@@ -154,14 +154,14 @@ export function CardMovements({ cardId }: { cardId: string }) {
 
 const styles = StyleSheet.create({
   section: { fontSize: 13, fontWeight: '600', marginBottom: 8, marginLeft: 8, textTransform: 'uppercase', letterSpacing: 0.6 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 18, paddingVertical: 14 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 22, paddingVertical: 22 },
   tile: { width: 36, height: 36, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   rowText: { flex: 1, gap: 2 },
   rowValue: { alignItems: 'flex-end', gap: 2, maxWidth: '45%' },
-  details: { paddingHorizontal: 18, paddingBottom: 14, paddingLeft: 68, gap: 4 },
+  details: { paddingHorizontal: 22, paddingBottom: 22, paddingLeft: 72, gap: 4 },
   line: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   separator: { height: StyleSheet.hairlineWidth, marginHorizontal: 18 },
   message: { textAlign: 'center', paddingVertical: 18, fontSize: 14 },
   loader: { paddingVertical: 18 },
-  more: { alignItems: 'center', paddingVertical: 14 },
+  more: { alignItems: 'center', paddingVertical: 18 },
 });

@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Lock, LockOpen } from 'lucide-react-native';
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -57,9 +57,18 @@ export default function CardDetailsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { cards, setBlocked } = useCards();
+  const { cards, setBlocked, reload } = useCards();
   const card = cards.find((c) => c.id === id);
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await reload();
+    setRefreshKey((k) => k + 1);
+    setRefreshing(false);
+  };
 
   const changeBlocked = (cardId: string, blocked: boolean) => {
     setBusy(true);
@@ -104,7 +113,10 @@ export default function CardDetailsScreen() {
             <Text style={{ color: t.textSecondary, fontSize: 16 }}>Card non trovata</Text>
           </View>
         ) : (
-          <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 32 }]} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 32 }]}
+            showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={t.textSecondary} />}>
             <Animated.View entering={FadeInDown.delay(80).duration(450)}>
               <FlipCard card={card} />
             </Animated.View>
@@ -165,7 +177,7 @@ export default function CardDetailsScreen() {
               </GlassPanel>
             </Animated.View>
             <Animated.View entering={FadeInDown.delay(380).duration(450)}>
-              <CardMovements cardId={card.id} />
+              <CardMovements cardId={card.id} refreshKey={refreshKey} />
             </Animated.View>
             <Animated.View entering={FadeInDown.delay(480).duration(450)}>
               <Pressable
@@ -192,7 +204,7 @@ const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   body: { paddingHorizontal: 24, paddingTop: 16, gap: 20 },
   section: { fontSize: 13, fontWeight: '600', marginBottom: 8, marginLeft: 8, textTransform: 'uppercase', letterSpacing: 0.6 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 14 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 22, paddingVertical: 22 },
   rowText: { flex: 1, gap: 2 },
   rowValue: { alignItems: 'flex-end', gap: 2, maxWidth: '55%' },
   separator: { height: StyleSheet.hairlineWidth, marginHorizontal: 18 },
