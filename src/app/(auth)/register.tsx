@@ -1,16 +1,31 @@
 import { Link, useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { AuthScreen, Divider, KeyboardAnchor } from '@/components/ui/auth-screen';
+import { AuthScreen, KeyboardAnchor } from '@/components/ui/auth-screen';
 import { Button } from '@/components/ui/button';
 import { EsercenteCodeField } from '@/components/ui/esercente-code-field';
-import { hasSocialLogin, SocialButtons } from '@/components/ui/social-buttons';
 import { TextField } from '@/components/ui/text-field';
 import { useAuth } from '@/context/auth';
+import { MISSING_CODE_MESSAGE, useEsercenteCode } from '@/hooks/use-esercente-code';
+import { useFormErrors } from '@/hooks/use-form-errors';
 import { useTheme } from '@/hooks/use-theme';
-import { ApiError } from '@/services/api';
-import { fetchEsercente, listAccounts, register, signInWithPassword } from '@/services/auth';
+import { errorMessage } from '@/services/api';
+import { register, signInWithPassword } from '@/services/auth';
+
+const MIN_PASSWORD_LENGTH = 8;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+type Field = 'cognome' | 'email' | 'password';
+
+/** Controlli fatti prima di chiamare il server: il primo campo non valido con il suo messaggio, null se è tutto a posto. */
+function validate(cognome: string, email: string, password: string): [Field, string] | null {
+  if (!cognome.trim()) return ['cognome', 'Il cognome è obbligatorio'];
+  if (!EMAIL_PATTERN.test(email.trim())) return ['email', 'Inserisci un indirizzo email valido'];
+  if (password.length < MIN_PASSWORD_LENGTH) return ['password', `La password deve avere almeno ${MIN_PASSWORD_LENGTH} caratteri`];
+  if (/^\s|\s$/.test(password)) return ['password', 'La password non può iniziare o finire con uno spazio'];
+  return null;
+}
 
 export default function RegisterScreen() {
   const t = useTheme();
@@ -18,75 +33,50 @@ export default function RegisterScreen() {
   const router = useRouter();
   // Il codice esercente arriva dal link/QR e non viene mostrato; il campo compare solo al primo avvio senza link né account.
   const { cod } = useLocalSearchParams<{ cod?: string }>();
-  const [esercente, setEsercente] = useState<string>();
-  const [hasAccounts, setHasAccounts] = useState<boolean | null>(null);
-  const [codice, setCodice] = useState('');
-  const [codeName, setCodeName] = useState<string>();
+  const esercente = useEsercenteCode(cod, 'first-run');
+  const { errors, fail, clear, shakeFor } = useFormErrors<Field>();
   const [info, setInfo] = useState<string>();
   const [nome, setNome] = useState('');
   const [cognome, setCognome] = useState('');
   const [email, setEmail] = useState('');
   const [telefono, setTelefono] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string>();
-  const [shakeKey, setShakeKey] = useState(0);
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    listAccounts().then((l) => setHasAccounts(l.length > 0));
-  }, []);
-
-  useEffect(() => {
-    if (!cod) return;
-    fetchEsercente(cod)
-      .then((e) => setEsercente(e.ragioneSociale))
-      .catch((e) => setError(e instanceof ApiError ? e.message : 'Errore imprevisto'));
-  }, [cod]);
-
-  const needsCode = !cod && hasAccounts === false;
-  const codEsercente = cod ?? codice;
 
   const onRegister = async () => {
     if (busy) return;
-    if (needsCode && !codeName) {
-      setError('Inserisci un codice esercente valido o scansiona il QR');
-      setShakeKey((k) => k + 1);
-      return;
-    }
-    if (!cognome.trim()) {
-      setError('Il cognome è obbligatorio');
-      setShakeKey((k) => k + 1);
-      return;
-    }
+    if (!esercente.codeValid) return fail('password', MISSING_CODE_MESSAGE);
+    const invalid = validate(cognome, email, password);
+    if (invalid) return fail(...invalid);
     setBusy(true);
     try {
-      const { emailDaConfermare } = await register({ nome, cognome, email, telefono, password }, codEsercente);
+      const { emailDaConfermare } = await register({ nome, cognome, email, telefono, password }, esercente.codEsercente);
       if (emailDaConfermare) {
         // l'account si attiva dal link ricevuto per email: poi si accede dal login
         setInfo(`Ti abbiamo inviato un'email a ${email.trim()}: conferma l'account dal link, poi accedi.`);
         return;
       }
-      const { cliente } = await signInWithPassword(email, password, codEsercente);
-      signIn({ cliente }); // primo accesso: propone la passkey
+      const { cliente } = await signInWithPassword(email, password, esercente.codEsercente);
+      signIn(cliente);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Errore imprevisto');
-      setShakeKey((k) => k + 1);
+      fail('password', errorMessage(e));
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <AuthScreen title="Crea account" subtitle={esercente ? `Registrati presso ${esercente}` : 'Registrati in pochi secondi'}>
-      {needsCode && <EsercenteCodeField
-          code={codice}
-          name={codeName}
+    <AuthScreen title="Crea account" subtitle={esercente.linkName ? `Registrati presso ${esercente.linkName}` : 'Registrati in pochi secondi'}>
+      {esercente.needsCode && (
+        <EsercenteCodeField
+          code={esercente.code}
+          name={esercente.name}
           onChange={(c, n) => {
-            setCodice(c);
-            setCodeName(n);
-            setError(undefined);
+            esercente.setCode(c, n);
+            clear('password');
           }}
-        />}
+        />
+      )}
       <TextField label="Nome" placeholder="Mario" autoComplete="given-name" value={nome} onChangeText={setNome} />
       <TextField
         label="Cognome"
@@ -95,36 +85,49 @@ export default function RegisterScreen() {
         value={cognome}
         onChangeText={(v) => {
           setCognome(v);
-          setError(undefined);
+          clear('cognome');
         }}
+        error={errors.cognome}
+        shakeKey={shakeFor('cognome')}
       />
-      <TextField label="Email" placeholder="nome@esempio.it" keyboardType="email-address" autoCapitalize="none" autoComplete="email" value={email} onChangeText={setEmail} />
+      <TextField
+        label="Email"
+        placeholder="nome@esempio.it"
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="email"
+        value={email}
+        onChangeText={(v) => {
+          setEmail(v);
+          clear('email');
+        }}
+        error={errors.email}
+        shakeKey={shakeFor('email')}
+      />
       <TextField label="Telefono (facoltativo)" placeholder="+39 333 1234567" keyboardType="phone-pad" autoComplete="tel" value={telefono} onChangeText={setTelefono} />
       <TextField
         label="Password"
-        placeholder="Almeno 8 caratteri"
+        placeholder={`Almeno ${MIN_PASSWORD_LENGTH} caratteri`}
         secureTextEntry
         autoCapitalize="none"
         autoComplete="new-password"
         value={password}
         onChangeText={(v) => {
           setPassword(v);
-          setError(undefined);
+          clear('password');
         }}
-        error={error}
-        shakeKey={shakeKey}
+        error={errors.password ?? esercente.linkError}
+        shakeKey={shakeFor('password')}
       />
       {info && <Text style={{ color: t.textSecondary, textAlign: 'center' }}>{info}</Text>}
       <KeyboardAnchor>
-        {info ? <Button title="Vai al login" onPress={() => router.replace({ pathname: '/login', params: cod ? { cod } : {} } as never)} /> : <Button title="Registrati" onPress={onRegister} />}
+        {info ? (
+          <Button title="Vai al login" onPress={() => router.replace({ pathname: '/login', params: cod ? { cod } : {} } as never)} />
+        ) : (
+          <Button title="Registrati" onPress={onRegister} loading={busy} />
+        )}
       </KeyboardAnchor>
-
-      {hasSocialLogin && (
-        <>
-          <Divider label="oppure continua con" />
-          <SocialButtons />
-        </>
-      )}
 
       <View style={styles.footer}>
         <Text style={{ color: t.textSecondary }}>Hai già un account? </Text>

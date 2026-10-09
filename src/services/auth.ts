@@ -1,20 +1,13 @@
-import { accountKey, clearAccounts, getActiveAccount, listAccounts, removeAccount, setAccountPassword, setActiveKey, upsertAccount, type SavedAccount } from '@/services/accounts';
-import { ApiError, apiGet, apiPost, cloudGet, cloudPost, cloudPostAuth } from '@/services/api';
+import { accountKey, clearAccounts, getAccount, getActiveAccount, removeAccount, setAccountPassword, setActiveKey, upsertAccount, type SavedAccount } from '@/services/accounts';
+import { ApiError, cloudGet, cloudPost, cloudPostAuth, isTransientError, type Envelope } from '@/services/api';
 
 export type AuthCliente = {
   idAna: number;
   email: string;
   nome: string;
   cognome: string;
-  emailVerificata: boolean;
   /** Cellulare o telefono, se presente. */
   telefono: string | null;
-  /** Data di creazione dell'accesso, formato yyyyMMdd (non fornita dal cloud). */
-  membroDal: string;
-  /** True se il cliente può accedere con email e password. */
-  accessoPassword: boolean;
-  /** Provider esterni collegati (es. google). */
-  provider: string[];
   /** Chiave dell'account salvato (esercente + email). */
   accountKey: string;
   /** Ragione sociale dell'esercente presso cui il cliente è registrato. */
@@ -26,15 +19,24 @@ export type AuthSession = {
   cliente: AuthCliente;
 };
 
-type LoginResponse = { cod: number; msg?: string; token: string; idCliente: number };
-type VerificaResponse = { cod: number; msg?: string; idCliente: number; nome: string | null; cognome: string | null; email: string | null; cel: string | null; codEsercente: string };
-type InfoEsercenteResponse = { cod: number; msg?: string; codEsercente: string; ragioneSociale: string | null; citta: string | null };
+type LoginResponse = Envelope & { token: string; idCliente: number };
+type VerificaResponse = Envelope & { idCliente: number; nome: string | null; cognome: string | null; email: string | null; cel: string | null; codEsercente: string };
+type InfoEsercenteResponse = Envelope & { codEsercente: string; ragioneSociale: string | null; citta: string | null };
+type RegistraResponse = Envelope & { idCliente: number; emailDaConfermare: boolean };
 
 /** Sessione corrente (token cloud dell'account attivo); le credenziali stanno negli account salvati. */
 let session: AuthSession | null = null;
 
-export function getSession(): AuthSession | null {
-  return session;
+/** Account salvato con quella chiave; solleva ApiError se non c'è più sul dispositivo. */
+async function requireAccount(key: string): Promise<SavedAccount> {
+  const acc = await getAccount(key);
+  if (!acc) throw new ApiError(-1, 'Account non trovato');
+  return acc;
+}
+
+/** Login sul cloud con le credenziali date; ritorna il token (scade dopo 5 minuti). */
+function loginRequest(acc: Pick<SavedAccount, 'codEsercente' | 'email'>, password: string): Promise<LoginResponse> {
+  return cloudPost<LoginResponse>('/AUC/LoginCliente', { CodEsercente: acc.codEsercente, User: acc.email, PWD: password });
 }
 
 /** Ragione sociale di un esercente a partire dal suo codice; solleva ApiError se il codice non è valido. */
@@ -45,7 +47,7 @@ export async function fetchEsercente(codEsercente: string): Promise<{ codEsercen
 
 /** Login sul cloud con le credenziali dell'account e lettura del profilo; imposta la sessione corrente. */
 async function loginCloud(acc: SavedAccount): Promise<AuthSession> {
-  const login = await cloudPost<LoginResponse>('/AUC/LoginCliente', { CodEsercente: acc.codEsercente, User: acc.email, PWD: acc.password });
+  const login = await loginRequest(acc, acc.password);
   const info = await cloudGet<VerificaResponse>(`/AUC/VerificaTokenAccessoCliente/${encodeURIComponent(login.token)}`);
   session = {
     accessToken: login.token,
@@ -54,11 +56,7 @@ async function loginCloud(acc: SavedAccount): Promise<AuthSession> {
       email: info.email || acc.email,
       nome: info.nome ?? '',
       cognome: info.cognome ?? '',
-      emailVerificata: true,
       telefono: info.cel || null,
-      membroDal: '',
-      accessoPassword: true,
-      provider: [],
       accountKey: accountKey(acc),
       esercente: acc.ragioneSociale,
     },
@@ -80,14 +78,10 @@ export async function signInWithPassword(email: string, password: string, codEse
 
 /** Accesso con un account già salvato (senza riscrivere la password). */
 export async function switchAccount(key: string): Promise<AuthSession> {
-  const acc = (await listAccounts()).find((a) => accountKey(a) === key);
-  if (!acc) throw new ApiError(-1, 'Account non trovato');
-  const s = await loginCloud(acc);
+  const s = await loginCloud(await requireAccount(key));
   await setActiveKey(key);
   return s;
 }
-
-export { listAccounts, type SavedAccount };
 
 /** Elimina un account salvato dal dispositivo; se era quello in uso chiude anche la sessione. */
 export async function forgetAccount(key: string): Promise<void> {
@@ -105,26 +99,32 @@ async function doRefresh(force: boolean): Promise<RefreshResult> {
   try {
     return { status: 'ok', session: await loginCloud(acc) };
   } catch (e) {
+    // rete, troppe richieste o server in errore: la sessione resta, si riprova più tardi
+    if (!(e instanceof ApiError) || isTransientError(e)) return { status: 'offline' };
     // credenziali non più valide (es. password cambiata): per riaccedere servono di nuovo
-    if (e instanceof ApiError && e.cod !== -1) {
-      session = null;
-      return { status: 'expired' };
-    }
-    return { status: 'offline' };
+    session = null;
+    return { status: 'expired' };
   }
 }
 
-let inflight: Promise<RefreshResult> | null = null;
+let inflight: { force: boolean; promise: Promise<RefreshResult> } | null = null;
 
 /**
  * Ripristina o rinnova la sessione dell'account attivo rifacendo il login con le credenziali salvate.
- * Con `force` rifà il login anche se una sessione esiste (token scaduto). Le chiamate contemporanee condividono la stessa richiesta.
+ * Con `force` rifà il login anche se una sessione esiste (token scaduto). Le chiamate contemporanee condividono la stessa richiesta;
+ * una richiesta forzata non si accontenta di una non forzata in corso, ma rifà il login quando questa finisce.
  */
 export function refreshSession(force = false): Promise<RefreshResult> {
-  inflight ??= doRefresh(force).finally(() => {
-    inflight = null;
-  });
-  return inflight;
+  if (inflight && (inflight.force || !force)) return inflight.promise;
+  const previous = inflight?.promise;
+  const entry = {
+    force,
+    promise: (previous ? previous.then(() => doRefresh(force)) : doRefresh(force)).finally(() => {
+      if (inflight === entry) inflight = null;
+    }),
+  };
+  inflight = entry;
+  return entry.promise;
 }
 
 /** Ripristina la sessione all'avvio con l'account attivo; null se assente, rifiutato o server non raggiungibile. */
@@ -134,35 +134,20 @@ export async function restoreSession(): Promise<AuthSession | null> {
 }
 
 /**
- * Esegue una chiamata autenticata: se l'access token risulta scaduto rinnova la sessione e riprova una volta.
+ * POST autenticato con la sessione in uso: se il token risulta scaduto rinnova la sessione e riprova una volta.
  * Se la sessione non è più valida solleva ApiError 401.
  */
-async function authed<T>(call: (accessToken: string) => Promise<T>): Promise<T> {
+async function sessionPost<T extends Envelope>(path: string, body: unknown): Promise<T> {
   if (!session) throw new ApiError(401, 'Sessione scaduta');
   try {
-    return await call(session.accessToken);
+    return await cloudPostAuth<T>(path, body, session.accessToken);
   } catch (e) {
     if (!(e instanceof ApiError) || e.cod !== 401) throw e;
   }
   const r = await refreshSession(true);
   if (r.status === 'expired') throw new ApiError(401, 'Sessione scaduta');
   if (r.status === 'offline') throw new ApiError(-1, 'Server non raggiungibile');
-  return call(r.session.accessToken);
-}
-
-/** GET autenticato. */
-export function authedGet<T extends { cod: number; msg?: string }>(path: string): Promise<T> {
-  return authed((token) => apiGet<T>(path, token));
-}
-
-/** POST autenticato. */
-export function authedPost<T extends { cod: number; msg?: string }>(path: string, body: unknown): Promise<T> {
-  return authed((token) => apiPost<T>(path, body, token));
-}
-
-/** POST autenticato al servizio cloud clienti (con rinnovo del token se scaduto). */
-export function cloudAuthedPost<T extends { cod: number; msg?: string }>(path: string, body: unknown = {}): Promise<T> {
-  return authed((token) => cloudPostAuth<T>(path, body, token));
+  return cloudPostAuth<T>(path, body, r.session.accessToken);
 }
 
 /** Token degli account salvati diversi da quello in uso (la scadenza lato server è di 5 minuti). */
@@ -173,7 +158,7 @@ async function tokenForAccount(acc: SavedAccount, force: boolean): Promise<strin
   const key = accountKey(acc);
   const hit = otherTokens.get(key);
   if (!force && hit && Date.now() - hit.at < OTHER_TOKEN_TTL_MS) return hit.token;
-  const login = await cloudPost<LoginResponse>('/AUC/LoginCliente', { CodEsercente: acc.codEsercente, User: acc.email, PWD: acc.password });
+  const login = await loginRequest(acc, acc.password);
   otherTokens.set(key, { token: login.token, at: Date.now() });
   return login.token;
 }
@@ -182,10 +167,9 @@ async function tokenForAccount(acc: SavedAccount, force: boolean): Promise<strin
  * POST autenticato al cloud per conto di un qualsiasi account salvato (non solo quello in uso): per l'account in uso
  * usa la sessione corrente, per gli altri fa il login con le credenziali salvate e rinnova il token se scaduto.
  */
-export async function cloudAuthedPostFor<T extends { cod: number; msg?: string }>(key: string, path: string, body: unknown = {}): Promise<T> {
-  if (session?.cliente.accountKey === key) return cloudAuthedPost<T>(path, body);
-  const acc = (await listAccounts()).find((a) => accountKey(a) === key);
-  if (!acc) throw new ApiError(-1, 'Account non trovato');
+export async function cloudAuthedPostFor<T extends Envelope>(key: string, path: string, body: unknown = {}): Promise<T> {
+  if (session?.cliente.accountKey === key) return sessionPost<T>(path, body);
+  const acc = await requireAccount(key);
   try {
     return await cloudPostAuth<T>(path, body, await tokenForAccount(acc, false));
   } catch (e) {
@@ -193,10 +177,6 @@ export async function cloudAuthedPostFor<T extends { cod: number; msg?: string }
   }
   return cloudPostAuth<T>(path, body, await tokenForAccount(acc, true));
 }
-
-const NON_DISPONIBILE ='Funzione non ancora disponibile con il nuovo accesso';
-
-type RegistraResponse = { cod: number; msg?: string; idCliente: number; emailDaConfermare: boolean };
 
 /**
  * Registrazione presso un esercente (nome utente = email). Se l'esercente richiede la conferma via email l'accesso
@@ -223,8 +203,7 @@ export async function requestPasswordReset(email: string, codEsercente: string):
 
 /** Invia il link per reimpostare la password di un account salvato (chiave esercente + email), senza richiedere di nuovo i dati. */
 export async function requestPasswordResetForAccount(key: string): Promise<void> {
-  const acc = (await listAccounts()).find((a) => accountKey(a) === key);
-  if (!acc) throw new ApiError(-1, 'Account non trovato');
+  const acc = await requireAccount(key);
   await cloudPost('/CLE/ResetPwdClienteApp', { CodEsercente: acc.codEsercente, EMail: acc.email });
 }
 
@@ -234,20 +213,13 @@ export async function resendConfirmation(email: string, codEsercente: string): P
   await cloudPost('/CLE/ReinoltraConfermaClienteApp', { CodEsercente: esercente.codEsercente, EMail: email.trim() });
 }
 
-/** TODO: sostituito dal reset password via email. */
-export async function changePassword(_currentPassword: string, _newPassword: string): Promise<void> {
-  throw new ApiError(-1, NON_DISPONIBILE);
-}
-
 /**
  * Controlla con il cloud la password digitata per un account salvato, senza aprire sessioni. Se è giusta la salva (potrebbe
- * essere cambiata rispetto a quella memorizzata). Solleva ApiError: cod -1 server non raggiungibile, 429 troppe richieste,
- * altro = credenziali rifiutate.
+ * essere cambiata rispetto a quella memorizzata). Solleva ApiError: errori temporanei (vedi isTransientError) o credenziali rifiutate.
  */
 export async function verifyAccountPassword(key: string, password: string): Promise<void> {
-  const acc = (await listAccounts()).find((a) => accountKey(a) === key);
-  if (!acc) throw new ApiError(-1, 'Account non trovato');
-  await cloudPost<LoginResponse>('/AUC/LoginCliente', { CodEsercente: acc.codEsercente, User: acc.email, PWD: password });
+  const acc = await requireAccount(key);
+  await loginRequest(acc, password);
   if (acc.password !== password) await setAccountPassword(key, password);
 }
 

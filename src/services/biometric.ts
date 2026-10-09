@@ -1,26 +1,14 @@
 import * as SecureStore from 'expo-secure-store';
 
+import { optionalNative } from '@/services/optional-native';
+
 /**
  * Sblocco biometrico (Face ID / impronta) dell'app, in alternativa al codice. Si offre solo se il codice è attivo e il telefono
- * ha la biometria configurata. Il modulo nativo si carica "morbido": finché il dev client non è ricompilato con
- * expo-local-authentication la biometria risulta semplicemente non disponibile, senza errori.
+ * ha la biometria configurata. Senza il modulo nativo la biometria risulta semplicemente non disponibile.
  */
 
-type LocalAuth = typeof import('expo-local-authentication');
-
-let cachedModule: LocalAuth | null | undefined;
-
-function load(): LocalAuth | null {
-  if (cachedModule === undefined) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      cachedModule = require('expo-local-authentication') as LocalAuth;
-    } catch {
-      cachedModule = null;
-    }
-  }
-  return cachedModule;
-}
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const load = optionalNative('biometric', () => require('expo-local-authentication') as typeof import('expo-local-authentication'));
 
 const PREF_KEY = 'cardapp.biometric';
 const OPTIONS: SecureStore.SecureStoreOptions = { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY };

@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { Platform, StyleSheet, View, useWindowDimensions } from 'react-native';
 import Animated, { useAnimatedStyle, useDerivedValue, useFrameCallback, useSharedValue, type SharedValue } from 'react-native-reanimated';
 
+import { useAppLock } from '@/context/app-lock';
 import { useBackgroundFocus } from '@/context/background-focus';
 import { useParallax } from '@/context/parallax';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -132,10 +133,12 @@ export function AnimatedBackground({ variant = 'soft' }: Props) {
 
   // Una schermata non in primo piano (es. quella che sta uscendo durante una transizione) smette di animare:
   // meno lavoro per frame mentre il telefono sta già animando il cambio schermata.
+  // Idem sotto la schermata del codice, che la copre per intero.
   const focused = useIsFocused();
+  const { locked } = useAppLock();
   useEffect(() => {
-    frame.setActive(focused);
-  }, [focused, frame]);
+    frame.setActive(focused && !locked);
+  }, [focused, locked, frame]);
 
   // Parallasse quasi impercettibile: lo sfondo scorre di pochi pixel in senso opposto all'inclinazione.
   const parallax = useParallax();

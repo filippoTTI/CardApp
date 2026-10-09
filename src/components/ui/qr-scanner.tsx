@@ -6,17 +6,13 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/hooks/use-theme';
 import { parseEsercenteCode } from '@/services/esercente-qr';
+import { optionalNative } from '@/services/optional-native';
 
 type CameraModule = typeof import('expo-camera');
 
-// Il modulo nativo si carica "morbido": finché il dev client non è ricompilato con expo-camera lo scanner dice solo che non è disponibile.
-let camera: CameraModule | null = null;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  camera = require('expo-camera') as CameraModule;
-} catch {
-  camera = null;
-}
+// Senza il modulo nativo della fotocamera lo scanner dice solo che non è disponibile.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const camera = optionalNative('camera', () => require('expo-camera') as CameraModule)();
 
 /**
  * Fotocamera integrata a schermo intero per leggere il QR dell'esercente (`cardapp://e/<codice>`).

@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { ChevronRight, Lock, Mail, Phone, ShieldCheck, Trash2, type LucideIcon } from 'lucide-react-native';
+import { ChevronRight, Lock, Mail, Phone, Store, Trash2, type LucideIcon } from 'lucide-react-native';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AccountList } from '@/components/ui/account-list';
@@ -13,57 +13,31 @@ import { IconButton } from '@/components/ui/icon-button';
 import { LogoutButton } from '@/components/ui/logout-button';
 import { ParallaxView } from '@/components/ui/parallax-view';
 import { ScreenHeader } from '@/components/ui/screen-header';
-import { euroFormat, numberFormat } from '@/constants/format';
+import { numberFormat } from '@/constants/format';
 import { Radius } from '@/constants/theme';
 import { useAppLock } from '@/context/app-lock';
 import { useAuth } from '@/context/auth';
 import { useCards } from '@/context/cards';
 import { useTheme } from '@/hooks/use-theme';
+import { PIN_LENGTH } from '@/services/app-lock';
 import type { AuthCliente } from '@/services/auth';
 import type { Card } from '@/types/card';
 
 type InfoRow = { Icon: LucideIcon; tile: string; label: string; value: string };
 
-const MONTHS = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
-const PROVIDER_LABEL: Record<string, string> = { google: 'Google', apple: 'Apple' };
-
-/** yyyyMMdd -> "Ottobre 2026". */
-function memberSince(value?: string): string | undefined {
-  if (!value || value.length !== 8) return undefined;
-  const month = Number(value.slice(4, 6));
-  return MONTHS[month - 1] ? `${MONTHS[month - 1]} ${value.slice(0, 4)}` : undefined;
-}
-
-/** Come accede il cliente: email e password e/o provider collegati. */
-function accessLabel(user: AuthCliente): string {
-  const methods = [
-    ...(user.accessoPassword ? ['Email e password'] : []),
-    // il backend potrebbe non inviare ancora il campo (versione precedente): in quel caso nessun provider
-    ...(user.provider ?? []).map((p) => PROVIDER_LABEL[p] ?? p),
-  ];
-  return methods.join(' · ');
-}
-
+/** Dati di contatto dell'account in uso, così come registrati presso l'esercente. */
 function infoRows(user: AuthCliente): InfoRow[] {
-  const rows: InfoRow[] = [{ Icon: Mail, tile: '#0EA5E9', label: 'Email', value: user.email }];
+  const rows: InfoRow[] = [{ Icon: Store, tile: '#F59E0B', label: 'Esercente', value: user.esercente }];
+  rows.push({ Icon: Mail, tile: '#0EA5E9', label: 'Email', value: user.email });
   if (user.telefono) rows.push({ Icon: Phone, tile: '#22C55E', label: 'Telefono', value: user.telefono });
-  const access = accessLabel(user);
-  if (access) rows.push({ Icon: ShieldCheck, tile: '#F59E0B', label: 'Accesso', value: access });
   return rows;
 }
 
-/** Riepilogo calcolato dalle card (punti e credito sommati separatamente). */
+/** Riepilogo delle card dell'account: quante sono, quante attive e i punti del saldo principale di ognuna. */
 function summarize(cards: Card[]) {
   let points = 0;
-  let euro = 0;
-  for (const c of cards) {
-    if (c.balance) {
-      if (c.balance.type === 'points') points += c.balance.amount;
-      else euro += c.balance.amount;
-    }
-    points += c.extraPoints ?? 0;
-  }
-  return { cards: cards.length, points, euro };
+  for (const c of cards) if (c.balance?.type === 'points') points += c.balance.amount;
+  return { cards: cards.length, active: cards.filter((c) => !c.blocked).length, points };
 }
 
 export default function ProfileScreen() {
@@ -71,19 +45,20 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { accounts } = useCards();
-  // il riepilogo riguarda solo le card dell'account in uso, come nome e contatti sopra
-  const cards = accounts.find((g) => g.key === user?.accountKey)?.cards ?? [];
+  // tutto quello che c'è in questa pagina (nome, contatti, riepilogo) riguarda solo l'account in uso
+  const group = accounts.find((g) => g.key === user?.accountKey);
   const { enabled: lockEnabled, biometricAvailable, biometricEnabled, setBiometricEnabled } = useAppLock();
-  const fullName = user ? `${user.nome} ${user.cognome}`.trim() : '';
+  const fullName = user ? `${user.nome} ${user.cognome}`.trim() || user.email : '';
   const initials = user ? `${user.nome.charAt(0)}${user.cognome.charAt(0)}`.toUpperCase() || user.email.charAt(0).toUpperCase() : '';
-  const since = memberSince(user?.membroDal);
   const rows = user ? infoRows(user) : [];
-  const sum = summarize(cards);
+  const sum = summarize(group?.cards ?? []);
+  // finché le card dell'account non sono arrivate i numeri non si conoscono
+  const known = group !== undefined && !group.loading;
 
   const stats = [
-    { label: 'Card', value: String(sum.cards) },
-    { label: 'Punti', value: numberFormat.format(sum.points) },
-    { label: 'Credito', value: euroFormat.format(sum.euro) },
+    { label: 'Card', value: known ? String(sum.cards) : '–' },
+    { label: 'Attive', value: known ? String(sum.active) : '–' },
+    { label: 'Punti', value: known ? numberFormat.format(sum.points) : '–' },
   ];
 
   return (
@@ -105,22 +80,21 @@ export default function ProfileScreen() {
         <ScrollView style={styles.flex} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
           <Animated.View entering={FadeInDown.delay(100).duration(550)}>
             {/* Parallasse con l'inclinazione del telefono: avatar più "vicino" (si muove di più) dei pannelli. */}
-            <ParallaxView shift={7} style={styles.hero}>
-              <Avatar3D initials={initials} size={112} />
-              <Text style={[styles.name, { color: t.text }]}>{fullName}</Text>
-              {user?.esercente ? <Text style={{ color: t.textSecondary, fontSize: 14 }}>{user.esercente}</Text> : null}
-              {since && (
-                <GlassPanel radius={999} style={styles.pill}>
-                  <Text style={{ color: t.text, fontSize: 13, fontWeight: '500' }}>Membro da {since}</Text>
-                </GlassPanel>
-              )}
+            {/* al cambio di account i dati in uscita lasciano il posto ai nuovi con una dissolvenza */}
+            <ParallaxView shift={7}>
+              <Animated.View key={user?.accountKey} entering={FadeIn.duration(300)} style={styles.hero}>
+                <Avatar3D initials={initials} size={112} />
+                <Text style={[styles.name, { color: t.text }]} numberOfLines={1}>
+                  {fullName}
+                </Text>
+              </Animated.View>
             </ParallaxView>
           </Animated.View>
 
           <Animated.View entering={FadeInDown.delay(250).duration(450)}>
             <ParallaxView shift={4}>
               <GlassPanel radius={Radius.lg}>
-                <View style={styles.statsRow}>
+                <Animated.View key={`${user?.accountKey}-${known}`} entering={FadeIn.duration(300)} style={styles.statsRow}>
                   {stats.map((st, i) => (
                     <View key={st.label} style={[styles.stat, i > 0 && { borderLeftColor: t.border, borderLeftWidth: StyleSheet.hairlineWidth }]}>
                       <Text style={[styles.statValue, { color: t.text }]} numberOfLines={1} adjustsFontSizeToFit>
@@ -129,7 +103,7 @@ export default function ProfileScreen() {
                       <Text style={{ color: t.textSecondary, fontSize: 12 }}>{st.label}</Text>
                     </View>
                   ))}
-                </View>
+                </Animated.View>
               </GlassPanel>
             </ParallaxView>
           </Animated.View>
@@ -138,7 +112,7 @@ export default function ProfileScreen() {
             <ParallaxView shift={4}>
               <GlassPanel radius={Radius.lg}>
                 {rows.map(({ Icon, tile, label, value }, i) => (
-                  <Animated.View key={label} entering={FadeInDown.delay(480 + i * 90).duration(400)}>
+                  <Animated.View key={`${user?.accountKey}-${label}`} entering={FadeInDown.delay(480 + i * 90).duration(400)}>
                     <View style={styles.row}>
                       <View style={[styles.tile, { backgroundColor: tile }]}>
                         <Icon size={18} color="#FFFFFF" strokeWidth={2.2} />
@@ -169,7 +143,7 @@ export default function ProfileScreen() {
                   </View>
                   <View style={styles.rowText}>
                     <Text style={{ color: t.text, fontSize: 16, fontWeight: '500' }}>Proteggi app</Text>
-                    <Text style={{ color: t.textSecondary, fontSize: 12 }}>{"Codice di 4 cifre all'apertura"}</Text>
+                    <Text style={{ color: t.textSecondary, fontSize: 12 }}>{`Codice di ${PIN_LENGTH} cifre all'apertura`}</Text>
                   </View>
                   <Switch
                     accessibilityLabel="Proteggi app con un codice"
@@ -237,7 +211,6 @@ const styles = StyleSheet.create({
   body: { flexGrow: 1, gap: 18, paddingBottom: 16 },
   hero: { alignItems: 'center', gap: 10, marginTop: 20, marginBottom: 6 },
   name: { fontSize: 26, fontWeight: '800', letterSpacing: -0.3, marginTop: 6 },
-  pill: { paddingHorizontal: 14, paddingVertical: 6 },
   statsRow: { flexDirection: 'row' },
   stat: { flex: 1, alignItems: 'center', gap: 2, paddingVertical: 16, paddingHorizontal: 8 },
   statValue: { fontSize: 20, fontWeight: '800', letterSpacing: -0.3 },

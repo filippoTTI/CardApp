@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -9,8 +9,10 @@ import { IconButton } from '@/components/ui/icon-button';
 import { PinPad } from '@/components/ui/pin-pad';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { useAppLock } from '@/context/app-lock';
+import { lockMessage, useLockCountdown } from '@/hooks/use-lock-countdown';
 import { useTheme } from '@/hooks/use-theme';
-import { getLockUntil } from '@/services/app-lock';
+import { errorMessage } from '@/services/api';
+import { PIN_LENGTH } from '@/services/app-lock';
 
 type Mode = 'set' | 'change' | 'disable';
 type Step = 'current' | 'new' | 'confirm';
@@ -18,7 +20,7 @@ type Step = 'current' | 'new' | 'confirm';
 const TITLES: Record<Mode, string> = { set: 'Proteggi app', change: 'Cambia codice', disable: 'Disattiva codice' };
 const PROMPTS: Record<Step, string> = {
   current: 'Inserisci il codice attuale',
-  new: 'Scegli un nuovo codice di 4 cifre',
+  new: `Scegli un nuovo codice di ${PIN_LENGTH} cifre`,
   confirm: 'Ripeti il codice per confermare',
 };
 
@@ -37,30 +39,7 @@ export default function PinSetupScreen() {
   const [first, setFirst] = useState('');
   const [error, setError] = useState<string>();
   const [shakeKey, setShakeKey] = useState(0);
-  const [lockedUntil, setLockedUntil] = useState(0);
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    let active = true;
-    getLockUntil().then((until) => {
-      if (active && until > 0) setLockedUntil(until);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (lockedUntil <= Date.now()) return;
-    const timer = setInterval(() => {
-      const n = Date.now();
-      setNow(n);
-      if (n >= lockedUntil) setLockedUntil(0);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [lockedUntil]);
-
-  const remaining = lockedUntil > now ? Math.ceil((lockedUntil - now) / 1000) : 0;
+  const { remaining, start: startLock } = useLockCountdown();
 
   const fail = (message: string) => {
     setError(message);
@@ -73,8 +52,7 @@ export default function PinSetupScreen() {
       const res = await verify(pin);
       if (!res.ok) {
         if (res.lockedUntil) {
-          setNow(Date.now());
-          setLockedUntil(res.lockedUntil);
+          startLock(res.lockedUntil);
           fail('Troppi tentativi, riprova più tardi');
         } else {
           fail(res.attemptsLeft !== undefined ? `Codice errato. Tentativi prima del blocco: ${res.attemptsLeft}` : 'Impossibile verificare il codice');
@@ -107,11 +85,11 @@ export default function PinSetupScreen() {
       await setPin(pin);
       router.back();
     } catch (e) {
-      Alert.alert(TITLES[mode], e instanceof Error ? e.message : 'Errore imprevisto');
+      Alert.alert(TITLES[mode], errorMessage(e));
     }
   };
 
-  const message = remaining ? `Troppi tentativi. Riprova tra ${remaining >= 60 ? `${Math.ceil(remaining / 60)} min` : `${remaining} s`}` : error;
+  const message = remaining ? lockMessage(remaining) : error;
 
   return (
     <View style={styles.flex}>

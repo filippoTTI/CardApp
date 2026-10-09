@@ -381,7 +381,7 @@ export function FlipCard({ card, onOpenDetails }: { card: Card; onOpenDetails?: 
                           {formatted.value}
                         </Text>
                         <Text style={[styles.small, { color: palette.textSoft, fontSize: 13 * k }]}>
-                          {card.extraPoints ? `${formatted.unit} · ${numberFormat.format(card.extraPoints)} punti` : formatted.unit}
+                          {formatted.unit}
                         </Text>
                       </>
                     )}

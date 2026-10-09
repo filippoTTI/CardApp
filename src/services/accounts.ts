@@ -11,9 +11,30 @@ export type SavedAccount = {
 
 type Stored = { accounts: SavedAccount[]; active: string | null };
 
-const STORE_KEY = 'cardapp.accounts';
+/**
+ * Le credenziali stanno nell'archivio sicuro leggibile solo a telefono sbloccato e mai trasferito su altri dispositivi
+ * (né incluso nei backup), come il codice di sblocco. La chiave precedente era salvata senza queste restrizioni:
+ * al primo avvio viene spostata sulla nuova e cancellata.
+ */
+const STORE_KEY = 'cardapp.accounts.v2';
+const LEGACY_STORE_KEY = 'cardapp.accounts';
+const OPTIONS: SecureStore.SecureStoreOptions = { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY };
 
 let cache: Stored | null = null;
+
+function parse(raw: string): Stored {
+  const parsed = JSON.parse(raw) as Stored;
+  return { accounts: parsed.accounts ?? [], active: parsed.active ?? null };
+}
+
+async function migrateLegacy(): Promise<Stored | null> {
+  const raw = await SecureStore.getItemAsync(LEGACY_STORE_KEY);
+  if (!raw) return null;
+  const stored = parse(raw);
+  await SecureStore.setItemAsync(STORE_KEY, JSON.stringify(stored), OPTIONS);
+  await SecureStore.deleteItemAsync(LEGACY_STORE_KEY);
+  return stored;
+}
 
 /** Chiave di un account: lo stesso cliente presso esercenti diversi (o con email diverse) resta distinto. */
 export function accountKey(a: { codEsercente: string; email: string }): string {
@@ -23,10 +44,10 @@ export function accountKey(a: { codEsercente: string; email: string }): string {
 async function load(): Promise<Stored> {
   if (cache) return cache;
   try {
-    const raw = await SecureStore.getItemAsync(STORE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Stored;
-      cache = { accounts: parsed.accounts ?? [], active: parsed.active ?? null };
+    const raw = await SecureStore.getItemAsync(STORE_KEY, OPTIONS);
+    const stored = raw ? parse(raw) : await migrateLegacy();
+    if (stored) {
+      cache = stored;
       return cache;
     }
   } catch {
@@ -39,7 +60,7 @@ async function load(): Promise<Stored> {
 async function save(next: Stored): Promise<void> {
   cache = next;
   try {
-    await SecureStore.setItemAsync(STORE_KEY, JSON.stringify(next));
+    await SecureStore.setItemAsync(STORE_KEY, JSON.stringify(next), OPTIONS);
   } catch {
     // gli account restano validi finché l'app è aperta
   }
@@ -54,8 +75,9 @@ export async function getActiveAccount(): Promise<SavedAccount | null> {
   return accounts.find((a) => accountKey(a) === active) ?? null;
 }
 
-export async function getActiveKey(): Promise<string | null> {
-  return (await load()).active;
+/** Account salvato con quella chiave, null se non c'è. */
+export async function getAccount(key: string): Promise<SavedAccount | null> {
+  return (await load()).accounts.find((a) => accountKey(a) === key) ?? null;
 }
 
 /** Aggiunge l'account (o ne aggiorna password e ragione sociale se esiste già) e lo rende attivo. */

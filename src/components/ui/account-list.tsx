@@ -1,13 +1,16 @@
+import * as Haptics from 'expo-haptics';
 import { KeyRound, Minus } from 'lucide-react-native';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { GlassPanel } from '@/components/ui/glass-panel';
 import { Radius } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
-import { accountKey } from '@/services/accounts';
-import { listAccounts, requestPasswordResetForAccount, type SavedAccount } from '@/services/auth';
+import { accountKey, listAccounts, type SavedAccount } from '@/services/accounts';
+import { errorMessage } from '@/services/api';
+import { requestPasswordResetForAccount } from '@/services/auth';
 
 /**
  * Account salvati sul dispositivo (uno per esercente e email): tocco sulla riga per passare all'altro,
@@ -17,6 +20,8 @@ export function AccountList() {
   const t = useTheme();
   const { user, switchAccount, removeAccount } = useAuth();
   const [accounts, setAccounts] = useState<SavedAccount[]>([]);
+  // account verso cui si sta passando: l'accesso richiede una chiamata al server
+  const [switching, setSwitching] = useState<string>();
 
   const refresh = useCallback(() => {
     listAccounts().then((l) => setAccounts([...l]));
@@ -26,8 +31,12 @@ export function AccountList() {
   if (accounts.length < 2) return null;
 
   const onSwitch = (key: string) => {
-    if (key === user?.accountKey) return;
-    switchAccount(key).catch((e) => Alert.alert('Cambia account', e instanceof Error ? e.message : 'Errore imprevisto'));
+    if (switching || key === user?.accountKey) return;
+    Haptics.selectionAsync();
+    setSwitching(key);
+    switchAccount(key)
+      .catch((e) => Alert.alert('Cambia account', errorMessage(e)))
+      .finally(() => setSwitching(undefined));
   };
   const onRemove = (a: SavedAccount) =>
     Alert.alert('Rimuovi account', `Vuoi uscire dall'account ${a.email} presso ${a.ragioneSociale}? Verrà tolto da questo telefono ma non eliminato: potrai riaccedere quando vuoi.`, [
@@ -42,7 +51,7 @@ export function AccountList() {
         onPress: () =>
           requestPasswordResetForAccount(accountKey(a))
             .then(() => Alert.alert('Recupera password', "Se l'account esiste, riceverai un'email con il link per reimpostare la password."))
-            .catch((e) => Alert.alert('Recupera password', e instanceof Error ? e.message : 'Errore imprevisto')),
+            .catch((e) => Alert.alert('Recupera password', errorMessage(e))),
       },
     ]);
 
@@ -51,17 +60,34 @@ export function AccountList() {
       {accounts.map((a, i) => {
         const key = accountKey(a);
         const active = key === user?.accountKey;
+        const pending = key === switching;
         return (
           <View key={key}>
             <View style={styles.row}>
-              <Pressable accessibilityRole="button" onPress={() => onSwitch(key)} style={({ pressed }) => [styles.text, { opacity: pressed ? 0.6 : 1 }]}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected: active, busy: pending, disabled: !!switching }}
+                accessibilityHint={active ? undefined : 'Passa a questo account'}
+                disabled={!!switching}
+                onPress={() => onSwitch(key)}
+                style={({ pressed }) => [styles.text, { opacity: pressed || (switching && !pending) ? 0.5 : 1 }]}>
                 <Text style={{ color: t.text, fontSize: 16, fontWeight: '600' }} numberOfLines={1}>
                   {a.ragioneSociale}
                 </Text>
                 <Text style={{ color: t.textSecondary, fontSize: 13 }} numberOfLines={1}>
                   {a.email}
                 </Text>
-                {active && <Text style={{ color: t.primary, fontSize: 12, fontWeight: '600' }}>In uso</Text>}
+                {active && !switching && (
+                  <Animated.Text entering={FadeIn.duration(250)} style={{ color: t.primary, fontSize: 12, fontWeight: '600' }}>
+                    In uso
+                  </Animated.Text>
+                )}
+                {pending && (
+                  <Animated.View entering={FadeIn.duration(200)} style={styles.pending}>
+                    <ActivityIndicator size="small" color={t.primary} />
+                    <Text style={{ color: t.primary, fontSize: 12, fontWeight: '600' }}>Accesso in corso…</Text>
+                  </Animated.View>
+                )}
               </Pressable>
               <Pressable
                 accessibilityRole="button"
@@ -91,6 +117,7 @@ export function AccountList() {
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 18, paddingHorizontal: 24, paddingVertical: 14 },
   text: { flex: 1, gap: 2 },
+  pending: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   minus: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   separator: { height: StyleSheet.hairlineWidth, marginLeft: 24 },
 });

@@ -14,8 +14,6 @@ export type Card = {
   code: string;
   /** Saldo in punti o in euro; assente per le card senza saldo (solo contatore standard). */
   balance?: CardBalance;
-  /** Punti presenti in aggiunta al saldo in euro (card con entrambi i contatori). */
-  extraPoints?: number;
   /** Dati reali dal backend (assenti nelle card di prova). */
   issuer?: { name: string; city?: string };
   blocked?: boolean;

@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { Plus, UserRound } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { InteractionManager, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AccountHeader } from '@/components/ui/account-header';
@@ -15,10 +15,8 @@ import { EnteringCard } from '@/components/ui/entering-card';
 import { CARD_SHADOW_CLEARANCE, FlipCard } from '@/components/ui/flip-card';
 import { IconButton } from '@/components/ui/icon-button';
 import { ScreenHeader } from '@/components/ui/screen-header';
-import { useAuth } from '@/context/auth';
 import { useCards } from '@/context/cards';
 import { useTheme } from '@/hooks/use-theme';
-import { isPasskeySupported } from '@/services/passkey';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -34,7 +32,6 @@ export default function HomeScreen() {
     await reload();
     setRefreshing(false);
   };
-  const { shouldOfferPasskey, dismissPasskeyOffer } = useAuth();
 
   // Le card (SVG, ombre) sono la parte pesante: compaiono a transizione finita, una dopo l'altra, così l'ingresso resta fluido.
   const [ready, setReady] = useState(false);
@@ -42,13 +39,6 @@ export default function HomeScreen() {
     const task = InteractionManager.runAfterInteractions(() => setReady(true));
     return () => task.cancel();
   }, []);
-
-  // Al primo login riuscito propone la creazione della passkey.
-  useEffect(() => {
-    if (!shouldOfferPasskey) return;
-    if (isPasskeySupported()) router.push('/passkey-setup');
-    else dismissPasskeyOffer();
-  }, [shouldOfferPasskey, router, dismissPasskeyOffer]);
 
   return (
     <View style={styles.container}>
@@ -96,7 +86,13 @@ export default function HomeScreen() {
                   accounts.map((group) => {
                     const open = !multi || !collapsed[group.key];
                     return (
-                      <View key={group.key} style={styles.group}>
+                      // al cambio di account in uso i gruppi scorrono nella nuova posizione invece di saltare
+                      <Animated.View
+                        key={group.key}
+                        style={styles.group}
+                        layout={LinearTransition.duration(350)}
+                        entering={FadeIn.duration(300)}
+                        exiting={FadeOut.duration(200)}>
                         {multi && (
                           <AccountHeader
                             title={group.ragioneSociale}
@@ -119,7 +115,7 @@ export default function HomeScreen() {
                               <FlipCard card={card} onOpenDetails={() => router.push({ pathname: '/card-details', params: { id: card.id } } as never)} />
                             </EnteringCard>
                           ))}
-                      </View>
+                      </Animated.View>
                     );
                   })}
               </ScrollView>

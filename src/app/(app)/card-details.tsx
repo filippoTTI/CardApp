@@ -16,6 +16,7 @@ import { CARD_KIND_LABEL, euroFormat, formatDate, numberFormat } from '@/constan
 import { Radius } from '@/constants/theme';
 import { useCards } from '@/context/cards';
 import { useTheme } from '@/hooks/use-theme';
+import { errorMessage } from '@/services/api';
 import type { Card, CardCounter } from '@/types/card';
 
 function formatCounter(c: CardCounter): { label: string; value: string } {
@@ -76,7 +77,7 @@ export default function CardDetailsScreen() {
       .then((message) => {
         if (message) Alert.alert('Card', message);
       })
-      .catch((e) => Alert.alert('Card', e instanceof Error ? e.message : 'Errore imprevisto'))
+      .catch((e) => Alert.alert('Card', errorMessage(e)))
       .finally(() => setBusy(false));
   };
 

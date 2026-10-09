@@ -1,59 +1,38 @@
 import { Link, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { AuthScreen, KeyboardAnchor } from '@/components/ui/auth-screen';
 import { Button } from '@/components/ui/button';
 import { EsercenteCodeField } from '@/components/ui/esercente-code-field';
 import { TextField } from '@/components/ui/text-field';
+import { MISSING_CODE_MESSAGE, useEsercenteCode } from '@/hooks/use-esercente-code';
+import { useFormErrors } from '@/hooks/use-form-errors';
 import { useTheme } from '@/hooks/use-theme';
-import { ApiError } from '@/services/api';
-import { fetchEsercente, listAccounts, requestPasswordReset, resendConfirmation } from '@/services/auth';
+import { errorMessage } from '@/services/api';
+import { requestPasswordReset, resendConfirmation } from '@/services/auth';
 
 /** Recupero password o nuovo invio dell'email di conferma (`mode=conferma`); il codice esercente arriva dal login e non viene mostrato. */
 export default function ForgotPasswordScreen() {
   const t = useTheme();
   const { cod, mode, email: emailParam } = useLocalSearchParams<{ cod?: string; mode?: string; email?: string }>();
   const conferma = mode === 'conferma';
-  const [esercente, setEsercente] = useState<string>();
-  const [hasAccounts, setHasAccounts] = useState<boolean | null>(null);
-  const [codice, setCodice] = useState('');
-  const [codeName, setCodeName] = useState<string>();
+  // come nel login: il campo codice compare solo se non c'è un link e non c'è nessun account salvato
+  const esercente = useEsercenteCode(cod, 'first-run');
+  const { errors, fail, clear, shakeFor } = useFormErrors<'email'>();
   const [email, setEmail] = useState(emailParam ?? '');
-  const [error, setError] = useState<string>();
-  const [shakeKey, setShakeKey] = useState(0);
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
 
-  useEffect(() => {
-    listAccounts().then((l) => setHasAccounts(l.length > 0));
-  }, []);
-
-  useEffect(() => {
-    if (!cod) return;
-    fetchEsercente(cod)
-      .then((e) => setEsercente(e.ragioneSociale))
-      .catch((e) => setError(e instanceof ApiError ? e.message : 'Errore imprevisto'));
-  }, [cod]);
-
-  // Come nel login: il campo codice compare solo se non c'è un link e non c'è nessun account salvato.
-  const needsCode = !cod && hasAccounts === false;
-  const codEsercente = cod ?? codice;
-
   const onSend = async () => {
     if (busy) return;
-    if (needsCode && !codeName) {
-      setError('Inserisci un codice esercente valido o scansiona il QR');
-      setShakeKey((k) => k + 1);
-      return;
-    }
+    if (!esercente.codeValid) return fail('email', MISSING_CODE_MESSAGE);
     setBusy(true);
     try {
-      await (conferma ? resendConfirmation(email, codEsercente) : requestPasswordReset(email, codEsercente));
+      await (conferma ? resendConfirmation(email, esercente.codEsercente) : requestPasswordReset(email, esercente.codEsercente));
       setSent(true);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Errore imprevisto');
-      setShakeKey((k) => k + 1);
+      fail('email', errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -62,29 +41,31 @@ export default function ForgotPasswordScreen() {
   return (
     <AuthScreen
       title={conferma ? 'Conferma account' : 'Password dimenticata'}
-      subtitle={esercente ? `Account presso ${esercente}` : conferma ? "Reinvia l'email di conferma" : 'Ti inviamo un link per reimpostarla'}>
-      {needsCode && <EsercenteCodeField
-          code={codice}
-          name={codeName}
+      subtitle={esercente.linkName ? `Account presso ${esercente.linkName}` : conferma ? "Reinvia l'email di conferma" : 'Ti inviamo un link per reimpostarla'}>
+      {esercente.needsCode && (
+        <EsercenteCodeField
+          code={esercente.code}
+          name={esercente.name}
           onChange={(c, n) => {
-            setCodice(c);
-            setCodeName(n);
-            setError(undefined);
+            esercente.setCode(c, n);
+            clear('email');
           }}
-        />}
+        />
+      )}
       <TextField
         label="Email"
         placeholder="nome@esempio.it"
         keyboardType="email-address"
         autoCapitalize="none"
+        autoCorrect={false}
         autoComplete="email"
         value={email}
         onChangeText={(v) => {
           setEmail(v);
-          setError(undefined);
+          clear('email');
         }}
-        error={error}
-        shakeKey={shakeKey}
+        error={errors.email ?? esercente.linkError}
+        shakeKey={shakeFor('email')}
       />
       {sent && (
         <Text style={{ color: t.textSecondary, textAlign: 'center' }}>
@@ -92,7 +73,7 @@ export default function ForgotPasswordScreen() {
         </Text>
       )}
       <KeyboardAnchor>
-        <Button title={sent ? 'Invia di nuovo' : 'Invia email'} onPress={onSend} />
+        <Button title={sent ? 'Invia di nuovo' : 'Invia email'} onPress={onSend} loading={busy} disabled={!email.trim()} />
       </KeyboardAnchor>
       <View style={styles.footer}>
         <Link href={{ pathname: '/login', params: cod ? { cod } : {} } as never} style={{ color: t.primary, fontWeight: '600' }}>

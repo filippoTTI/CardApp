@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
-import { ApiError } from '@/services/api';
+import { ApiError, isTransientError } from '@/services/api';
 import {
   addRecoveryFailure,
   clearPin,
@@ -32,6 +32,8 @@ type AppLockValue = {
   enabled: boolean;
   /** L'app è bloccata: va mostrata la schermata del codice. */
   locked: boolean;
+  /** Con il codice attivo, l'app non è in primo piano: il contenuto va coperto (anteprima del multitasking). */
+  covered: boolean;
   /** Il telefono ha la biometria configurata. */
   biometricAvailable: boolean;
   /** Lo sblocco biometrico è in uso (codice attivo, biometria disponibile e scelta dall'utente). */
@@ -58,6 +60,7 @@ export function AppLockProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [locked, setLocked] = useState(false);
+  const [covered, setCovered] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricPreferred, setBiometricPreferredState] = useState(true);
   const backgroundAt = useRef<number | null>(null);
@@ -79,18 +82,26 @@ export function AppLockProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Tornando dal secondo piano dopo un po', l'app si riblocca. (I dialoghi di sistema mettono l'app solo in "inactive", non la bloccano.)
+  // Appena l'app esce dal primo piano viene coperta: l'anteprima del multitasking non mostra card e QR, e al ritorno
+  // non si vede il contenuto per un attimo prima della schermata del codice. Su iOS l'anteprima si scatta già in "inactive".
   useEffect(() => {
     if (!enabled) return;
+    const coverOn = Platform.OS === 'ios' ? ['inactive', 'background'] : ['background'];
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'background') {
-        backgroundAt.current = Date.now();
-      } else if (state === 'active') {
+      if (state === 'active') {
         const at = backgroundAt.current;
         backgroundAt.current = null;
         if (at !== null && Date.now() - at >= LOCK_AFTER_MS) setLocked(true);
+        setCovered(false);
+        return;
       }
+      if (state === 'background') backgroundAt.current = Date.now();
+      if (coverOn.includes(state)) setCovered(true);
     });
-    return () => sub.remove();
+    return () => {
+      sub.remove();
+      setCovered(false);
+    };
   }, [enabled]);
 
   const verify = useCallback((pin: string) => verifyPin(pin), []);
@@ -135,8 +146,8 @@ export function AppLockProvider({ children }: { children: ReactNode }) {
       try {
         await verifyAccountPassword(accountKey, password);
       } catch (e) {
-        // rete assente o troppe richieste: non è un verdetto sulla password
-        if (e instanceof ApiError && (e.cod === -1 || e.cod === 429)) return { status: 'error', message: e.message };
+        // rete assente, troppe richieste o server in errore: non è un verdetto sulla password
+        if (e instanceof ApiError && isTransientError(e)) return { status: 'error', message: e.message };
         const failures = await addRecoveryFailure();
         if (failures >= MAX_RECOVERY_FAILURES) {
           await resetLocalAccounts();
@@ -154,8 +165,8 @@ export function AppLockProvider({ children }: { children: ReactNode }) {
   const biometricEnabled = enabled && biometricAvailable && biometricPreferred;
 
   const value = useMemo(
-    () => ({ ready, enabled, locked, biometricAvailable, biometricEnabled, unlock, unlockWithBiometric, verify, setPin, disable, setBiometricEnabled, recover }),
-    [ready, enabled, locked, biometricAvailable, biometricEnabled, unlock, unlockWithBiometric, verify, setPin, disable, setBiometricEnabled, recover],
+    () => ({ ready, enabled, locked, covered, biometricAvailable, biometricEnabled, unlock, unlockWithBiometric, verify, setPin, disable, setBiometricEnabled, recover }),
+    [ready, enabled, locked, covered, biometricAvailable, biometricEnabled, unlock, unlockWithBiometric, verify, setPin, disable, setBiometricEnabled, recover],
   );
   return <AppLockContext.Provider value={value}>{children}</AppLockContext.Provider>;
 }

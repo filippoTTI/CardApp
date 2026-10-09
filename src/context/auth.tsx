@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 
-import { accountKey } from '@/services/accounts';
-import { deleteAccountOnServer, forgetAccount, listAccounts, refreshSession, restoreSession, signOutRemote, switchAccount as switchAccountRemote, type AuthCliente } from '@/services/auth';
+import { accountKey, listAccounts } from '@/services/accounts';
+import { deleteAccountOnServer, forgetAccount, refreshSession, restoreSession, signOutRemote, switchAccount as switchAccountRemote, type AuthCliente } from '@/services/auth';
 
 type AuthContextValue = {
   isSignedIn: boolean;
@@ -10,11 +10,10 @@ type AuthContextValue = {
   isRestoring: boolean;
   /** Cliente collegato alla sessione corrente. */
   user: AuthCliente | null;
-  /** Aumenta quando l'elenco degli account salvati cambia (rimozione, eliminazione). */
+  /** Aumenta quando l'elenco degli account salvati cambia (aggiunta, rimozione, eliminazione). */
   accountsVersion: number;
-  /** True dopo il primo login finché l'utente non ha visto la proposta passkey. */
-  shouldOfferPasskey: boolean;
-  signIn: (options?: { skipPasskeyOffer?: boolean; cliente?: AuthCliente }) => void;
+  /** Entra con il cliente appena autenticato (login, registrazione, nuovo account). */
+  signIn: (cliente: AuthCliente) => void;
   /** Chiude la sessione senza rimuovere nulla dal telefono (usato dal reset dell'app). */
   signOut: () => void;
   /** Esce dall'account in uso: lo rimuove dal telefono e passa al primo degli altri account salvati (login solo se non ne restano). */
@@ -25,7 +24,6 @@ type AuthContextValue = {
   removeAccount: (key: string) => Promise<void>;
   /** Elimina l'account sul server e chiude la sessione. Solleva ApiError se non riesce. */
   deleteAccount: (key: string, password: string) => Promise<void>;
-  dismissPasskeyOffer: () => void;
 };
 
 /** Ogni quanto si rinnova la sessione mentre l'app è aperta (la scadenza lato server è di 5 minuti). */
@@ -37,10 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [isRestoring, setIsRestoring] = useState(true);
   const [user, setUser] = useState<AuthCliente | null>(null);
-  const [shouldOfferPasskey, setShouldOfferPasskey] = useState(false);
   const [accountsVersion, setAccountsVersion] = useState(0);
-  // TODO: persistere (es. expo-secure-store) legato all'utente reale.
-  const [passkeyOffered, setPasskeyOffered] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -48,7 +43,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!active) return;
       if (s) {
         setUser(s.cliente);
-        setPasskeyOffered(true); // chi riapre l'app con una sessione salvata ha già superato il primo accesso
         setIsSignedIn(true);
       }
       setIsRestoring(false);
@@ -64,7 +58,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const check = async () => {
       const r = await refreshSession();
       if (r.status === 'expired') {
-        setShouldOfferPasskey(false);
         setUser(null);
         setIsSignedIn(false);
       }
@@ -79,17 +72,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [isSignedIn]);
 
-  const signIn = useCallback(
-    (options?: { skipPasskeyOffer?: boolean; cliente?: AuthCliente }) => {
-      setShouldOfferPasskey(!passkeyOffered && !options?.skipPasskeyOffer);
-      setUser(options?.cliente ?? null);
-      setIsSignedIn(true);
-    },
-    [passkeyOffered],
-  );
+  const signIn = useCallback((cliente: AuthCliente) => {
+    setUser(cliente);
+    // l'account potrebbe essere nuovo: le card vanno ricaricate anche se si era già dentro
+    setAccountsVersion((v) => v + 1);
+    setIsSignedIn(true);
+  }, []);
   const signOut = useCallback(() => {
     void signOutRemote();
-    setShouldOfferPasskey(false);
     setUser(null);
     setIsSignedIn(false);
   }, []);
@@ -111,7 +101,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // l'altro account non si apre (es. password cambiata): si torna al login, gli account restano salvati
       }
     }
-    setShouldOfferPasskey(false);
     setUser(null);
     setIsSignedIn(false);
   }, []);
@@ -133,19 +122,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (key: string, password: string) => {
       // prima il server: se rifiuta (password errata, card ancora assegnate) l'account resta com'e'
       await deleteAccountOnServer(key, password);
-      setPasskeyOffered(false);
       await removeAccount(key);
     },
     [removeAccount],
   );
-  const dismissPasskeyOffer = useCallback(() => {
-    setShouldOfferPasskey(false);
-    setPasskeyOffered(true);
-  }, []);
 
   const value = useMemo(
-    () => ({ isSignedIn, isRestoring, user, accountsVersion, shouldOfferPasskey, signIn, signOut, leaveAccount, switchAccount, removeAccount, deleteAccount, dismissPasskeyOffer }),
-    [isSignedIn, isRestoring, user, accountsVersion, shouldOfferPasskey, signIn, signOut, leaveAccount, switchAccount, removeAccount, deleteAccount, dismissPasskeyOffer],
+    () => ({ isSignedIn, isRestoring, user, accountsVersion, signIn, signOut, leaveAccount, switchAccount, removeAccount, deleteAccount }),
+    [isSignedIn, isRestoring, user, accountsVersion, signIn, signOut, leaveAccount, switchAccount, removeAccount, deleteAccount],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

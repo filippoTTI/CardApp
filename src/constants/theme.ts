@@ -8,7 +8,6 @@ export const Colors = {
     primary: '#16A34A',
     primaryText: '#FFFFFF',
     danger: '#DC2626',
-    socialText: '#0F1A12',
     card: 'rgba(255,255,255,0.78)',
   },
   dark: {
@@ -20,7 +19,6 @@ export const Colors = {
     primary: '#22C55E',
     primaryText: '#04130A',
     danger: '#F87171',
-    socialText: '#F2F7F3',
     card: 'rgba(21,29,24,0.72)',
   },
 } as const;

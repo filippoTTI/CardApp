@@ -1,8 +1,11 @@
+import { useIsFocused } from 'expo-router';
 import { CreditCard } from 'lucide-react-native';
+import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown, useAnimatedStyle, useFrameCallback, useSharedValue } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
+import { useAppLock } from '@/context/app-lock';
 import { useTheme } from '@/hooks/use-theme';
 
 const W = 220;
@@ -36,9 +39,15 @@ function MiniCard({ id, top, bottom, rotate, x, y, opacity = 1 }: {
 export function EmptyCards() {
   const t = useTheme();
   const clock = useSharedValue(0);
-  useFrameCallback((f) => {
+  const frame = useFrameCallback((f) => {
     clock.value = f.timestamp;
   });
+  // ferma quando la home non è in primo piano (profilo aperto sopra) o è coperta dalla schermata del codice
+  const focused = useIsFocused();
+  const { locked } = useAppLock();
+  useEffect(() => {
+    frame.setActive(focused && !locked);
+  }, [focused, locked, frame]);
   const float = useAnimatedStyle(() => ({
     transform: [{ translateY: Math.sin((clock.value / 4200) * Math.PI * 2) * 7 }],
   }));

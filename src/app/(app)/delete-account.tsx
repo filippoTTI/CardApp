@@ -2,9 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { TriangleAlert } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AccountPicker } from '@/components/ui/account-picker';
 import { AnimatedBackground } from '@/components/ui/animated-background';
 import { GlassPanel } from '@/components/ui/glass-panel';
 import { HoldButton } from '@/components/ui/hold-button';
@@ -13,10 +14,10 @@ import { ScreenHeader } from '@/components/ui/screen-header';
 import { TextField } from '@/components/ui/text-field';
 import { Radius } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
+import { useFormErrors } from '@/hooks/use-form-errors';
 import { useTheme } from '@/hooks/use-theme';
-import { accountKey } from '@/services/accounts';
-import { ApiError } from '@/services/api';
-import { listAccounts, type SavedAccount } from '@/services/auth';
+import { accountKey, listAccounts, type SavedAccount } from '@/services/accounts';
+import { errorMessage } from '@/services/api';
 
 /**
  * Eliminazione definitiva di un account: si sceglie quale (se ce ne sono più di uno), si riconferma la password e si tiene
@@ -27,11 +28,10 @@ export default function DeleteAccountScreen() {
   const t = useTheme();
   const router = useRouter();
   const { user, deleteAccount } = useAuth();
+  const { errors, fail, clear, shakeFor } = useFormErrors<'password'>();
   const [accounts, setAccounts] = useState<SavedAccount[]>([]);
   const [selected, setSelected] = useState<string | undefined>(user?.accountKey);
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string>();
-  const [shakeKey, setShakeKey] = useState(0);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -45,19 +45,14 @@ export default function DeleteAccountScreen() {
 
   const onDelete = async () => {
     if (busy || !selected) return;
-    if (!password) {
-      setError('Inserisci la password per confermare');
-      setShakeKey((k) => k + 1);
-      return;
-    }
+    if (!password) return fail('password', 'Inserisci la password per confermare');
     setBusy(true);
     try {
       await deleteAccount(selected, password);
       Alert.alert('Account eliminato', "L'account è stato eliminato definitivamente.");
       if (router.canGoBack()) router.back();
     } catch (e) {
-      setError(e instanceof ApiError || e instanceof Error ? e.message : 'Errore imprevisto');
-      setShakeKey((k) => k + 1);
+      fail('password', errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -87,35 +82,15 @@ export default function DeleteAccountScreen() {
             </GlassPanel>
 
             {accounts.length > 1 && (
-              <GlassPanel radius={Radius.lg}>
-                {accounts.map((a, i) => {
-                  const key = accountKey(a);
-                  const active = key === selected;
-                  return (
-                    <View key={key}>
-                      <Pressable
-                        accessibilityRole="radio"
-                        accessibilityState={{ selected: active }}
-                        onPress={() => {
-                          setSelected(key);
-                          setError(undefined);
-                        }}
-                        style={styles.row}>
-                        <View style={[styles.radio, { borderColor: active ? t.danger : t.textSecondary }]}>{active && <View style={[styles.radioDot, { backgroundColor: t.danger }]} />}</View>
-                        <View style={styles.flex}>
-                          <Text style={{ color: t.text, fontSize: 16, fontWeight: '600' }} numberOfLines={1}>
-                            {a.ragioneSociale}
-                          </Text>
-                          <Text style={{ color: t.textSecondary, fontSize: 13 }} numberOfLines={1}>
-                            {a.email}
-                          </Text>
-                        </View>
-                      </Pressable>
-                      {i < accounts.length - 1 && <View style={[styles.separator, { backgroundColor: t.border }]} />}
-                    </View>
-                  );
-                })}
-              </GlassPanel>
+              <AccountPicker
+                accounts={accounts}
+                selected={selected}
+                color={t.danger}
+                onSelect={(key) => {
+                  setSelected(key);
+                  clear('password');
+                }}
+              />
             )}
 
             <TextField
@@ -128,10 +103,10 @@ export default function DeleteAccountScreen() {
               value={password}
               onChangeText={(v) => {
                 setPassword(v);
-                setError(undefined);
+                clear('password');
               }}
-              error={error}
-              shakeKey={shakeKey}
+              error={errors.password}
+              shakeKey={shakeFor('password')}
             />
 
             <HoldButton title="Tieni premuto per eliminare" onConfirm={onDelete} disabled={busy || !password || !selected} />
@@ -150,8 +125,4 @@ const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 20 },
   body: { gap: 18, paddingTop: 12, paddingBottom: 24 },
   warning: { alignItems: 'center', gap: 12, paddingHorizontal: 22, paddingVertical: 20 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 24, paddingVertical: 14 },
-  radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  radioDot: { width: 10, height: 10, borderRadius: 5 },
-  separator: { height: StyleSheet.hairlineWidth, marginLeft: 24 },
 });

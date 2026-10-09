@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { View } from 'react-native';
 
 import { LockScreen } from '@/components/ui/lock-screen';
+import { PrivacyCover } from '@/components/ui/privacy-cover';
 import { AppLockProvider, useAppLock } from '@/context/app-lock';
 import { AuthProvider, useAuth } from '@/context/auth';
 import { BackgroundFocusProvider } from '@/context/background-focus';
@@ -14,7 +15,7 @@ import { useTheme } from '@/hooks/use-theme';
 
 function RootStack() {
   const { isSignedIn, isRestoring } = useAuth();
-  const { ready: lockReady, locked } = useAppLock();
+  const { ready: lockReady, locked, covered } = useAppLock();
   const t = useTheme();
   // Finché non si sa se c'è una sessione salvata resta visibile lo splash (evita il lampo della schermata di login).
   // Idem finché non si sa se l'app è protetta da un codice: niente lampo di contenuto prima della schermata di blocco.
@@ -32,6 +33,8 @@ function RootStack() {
       </Stack>
       {/* Con il codice attivo copre tutto (anche il login) finché non viene inserito. */}
       {locked && <LockScreen />}
+      {/* App fuori dal primo piano: copre anche la schermata del codice, così l'anteprima del multitasking mostra solo il logo. */}
+      {covered && <PrivacyCover />}
     </View>
   );
 }

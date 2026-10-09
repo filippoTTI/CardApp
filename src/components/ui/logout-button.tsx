@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 
 import { IconButton } from '@/components/ui/icon-button';
 import { useAuth } from '@/context/auth';
+import { errorMessage } from '@/services/api';
 
 /** Esce dall'account in uso (non dagli altri): icona "esci" moderna (Lucide), solo icona. */
 export function LogoutButton() {
@@ -11,7 +12,7 @@ export function LogoutButton() {
   const confirm = () =>
     Alert.alert("Esci dall'account", `Vuoi uscire dall'account ${user?.email ?? ''}${where}? Verrà rimosso da questo telefono; gli altri account restano.`, [
       { text: 'Annulla', style: 'cancel' },
-      { text: 'Esci', style: 'destructive', onPress: () => void leaveAccount().catch((e) => Alert.alert('Esci', e instanceof Error ? e.message : 'Errore imprevisto')) },
+      { text: 'Esci', style: 'destructive', onPress: () => void leaveAccount().catch((e) => Alert.alert('Esci', errorMessage(e))) },
     ]);
   return (
     <IconButton label="Esci" onPress={confirm}>

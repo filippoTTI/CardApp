@@ -134,17 +134,6 @@ export function AuthScreen({ title, subtitle, children }: Props) {
   );
 }
 
-export function Divider({ label }: { label: string }) {
-  const t = useTheme();
-  return (
-    <View style={styles.divider}>
-      <View style={[styles.line, { backgroundColor: t.border }]} />
-      <Text style={{ color: t.textSecondary, fontSize: 13 }}>{label}</Text>
-      <View style={[styles.line, { backgroundColor: t.border }]} />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   // `area` centra il contenuto; se è più alto dello spazio disponibile sborda in modo simmetrico e lo scale lo riporta dentro.
@@ -155,6 +144,4 @@ const styles = StyleSheet.create({
   title: { fontSize: 32, fontWeight: '800', letterSpacing: -0.5 },
   subtitle: { fontSize: 16, textAlign: 'center' },
   card: { padding: Spacing.four, gap: Spacing.three },
-  divider: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
-  line: { flex: 1, height: StyleSheet.hairlineWidth },
 });

@@ -3,52 +3,26 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, BackHandler, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AccountPicker } from '@/components/ui/account-picker';
 import { Button } from '@/components/ui/button';
 import { PinPad } from '@/components/ui/pin-pad';
 import { TextField } from '@/components/ui/text-field';
 import { useAppLock } from '@/context/app-lock';
 import { useAuth } from '@/context/auth';
+import { useFormErrors } from '@/hooks/use-form-errors';
+import { lockMessage, useLockCountdown } from '@/hooks/use-lock-countdown';
 import { useTheme } from '@/hooks/use-theme';
-import { accountKey } from '@/services/accounts';
-import { MAX_RECOVERY_FAILURES, getLockUntil } from '@/services/app-lock';
-import { listAccounts, type SavedAccount } from '@/services/auth';
-
-function lockMessage(seconds: number): string {
-  if (seconds >= 60) return `Troppi tentativi. Riprova tra ${Math.ceil(seconds / 60)} min`;
-  return `Troppi tentativi. Riprova tra ${seconds} s`;
-}
+import { accountKey, listAccounts, type SavedAccount } from '@/services/accounts';
+import { MAX_RECOVERY_FAILURES, PIN_LENGTH } from '@/services/app-lock';
 
 /** Schermata a tutto schermo che copre l'app finché non si inserisce il codice di sblocco (o non lo si recupera). */
 export function LockScreen() {
   const t = useTheme();
   const { unlock, unlockWithBiometric, biometricEnabled } = useAppLock();
+  const { remaining, start: startLock } = useLockCountdown();
   const [recovering, setRecovering] = useState(false);
   const [error, setError] = useState<string>();
   const [shakeKey, setShakeKey] = useState(0);
-  const [lockedUntil, setLockedUntil] = useState(0);
-  const [now, setNow] = useState(() => Date.now());
-
-  // se i tentativi erano già bloccati (app riaperta durante il blocco) lo si legge subito
-  useEffect(() => {
-    let active = true;
-    getLockUntil().then((until) => {
-      if (active && until > 0) setLockedUntil(until);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  // conto alla rovescia del blocco
-  useEffect(() => {
-    if (lockedUntil <= Date.now()) return;
-    const timer = setInterval(() => {
-      const n = Date.now();
-      setNow(n);
-      if (n >= lockedUntil) setLockedUntil(0);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [lockedUntil]);
 
   // con l'app bloccata il tasto indietro di Android non deve arrivare alle schermate sotto
   useEffect(() => {
@@ -68,15 +42,12 @@ export function LockScreen() {
     if (biometricEnabled && !recovering) tryBiometric();
   }, [biometricEnabled, recovering, tryBiometric]);
 
-  const remaining = lockedUntil > now ? Math.ceil((lockedUntil - now) / 1000) : 0;
-
   const onComplete = async (pin: string) => {
     const res = await unlock(pin);
     if (res.ok) return;
     setShakeKey((k) => k + 1);
     if (res.lockedUntil) {
-      setNow(Date.now());
-      setLockedUntil(res.lockedUntil);
+      startLock(res.lockedUntil);
       setError(undefined);
     } else {
       setError(res.attemptsLeft !== undefined ? `Codice errato. Tentativi prima del blocco: ${res.attemptsLeft}` : 'Impossibile verificare il codice');
@@ -100,7 +71,7 @@ export function LockScreen() {
           </View>
           <Text style={[styles.title, { color: t.text }]}>Inserisci il codice</Text>
           <Text style={[styles.message, { color: remaining || error ? t.danger : t.textSecondary }]}>
-            {remaining ? lockMessage(remaining) : (error ?? "Sblocca l'app con il tuo codice di 4 cifre")}
+            {remaining ? lockMessage(remaining) : (error ?? `Sblocca l'app con il tuo codice di ${PIN_LENGTH} cifre`)}
           </Text>
         </View>
         <PinPad onComplete={onComplete} shakeKey={shakeKey} disabled={remaining > 0} onBiometric={biometricEnabled ? tryBiometric : undefined} />
@@ -121,11 +92,10 @@ function Recovery({ onCancel }: { onCancel: () => void }) {
   const t = useTheme();
   const { recover, disable } = useAppLock();
   const { signOut } = useAuth();
+  const { errors, fail, clear, shakeFor } = useFormErrors<'password'>();
   const [accounts, setAccounts] = useState<SavedAccount[] | null>(null);
   const [selected, setSelected] = useState<string>();
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string>();
-  const [shakeKey, setShakeKey] = useState(0);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -135,25 +105,19 @@ function Recovery({ onCancel }: { onCancel: () => void }) {
     });
   }, []);
 
-  const fail = (message: string) => {
-    setError(message);
-    setShakeKey((k) => k + 1);
-  };
-
   const onConfirm = async () => {
-    if (busy || !selected) return;
-    if (!password) return fail('Inserisci la password');
+    if (busy || !selected || !password) return;
     setBusy(true);
     try {
       const res = await recover(selected, password);
       if (res.status === 'reset') {
         signOut();
-        Alert.alert('App reimpostata', 'Dopo 3 password errate gli account sono stati rimossi da questo telefono. Accedi di nuovo con le tue credenziali: i dati sul cloud non sono stati toccati.');
+        Alert.alert('App reimpostata', `Dopo ${MAX_RECOVERY_FAILURES} password errate gli account sono stati rimossi da questo telefono. Accedi di nuovo con le tue credenziali: i dati sul cloud non sono stati toccati.`);
       } else if (res.status === 'wrong') {
         setPassword('');
-        fail(`Password errata. Tentativi rimasti: ${res.attemptsLeft}. Al ${MAX_RECOVERY_FAILURES}° errore l'app viene reimpostata.`);
+        fail('password', `Password errata. Tentativi rimasti: ${res.attemptsLeft}. Al ${MAX_RECOVERY_FAILURES}° errore l'app viene reimpostata.`);
       } else if (res.status === 'error') {
-        fail(res.message);
+        fail('password', res.message);
       }
       // ok: il codice è stato rimosso e la schermata sparisce da sola
     } finally {
@@ -184,30 +148,15 @@ function Recovery({ onCancel }: { onCancel: () => void }) {
           ) : (
             <>
               {accounts.length > 1 && (
-                <View style={[styles.accounts, { borderColor: t.border }]}>
-                  {accounts.map((a, i) => {
-                    const key = accountKey(a);
-                    const active = key === selected;
-                    return (
-                      <Pressable
-                        key={key}
-                        accessibilityRole="radio"
-                        accessibilityState={{ selected: active }}
-                        onPress={() => setSelected(key)}
-                        style={[styles.accountRow, i > 0 && { borderTopColor: t.border, borderTopWidth: StyleSheet.hairlineWidth }]}>
-                        <View style={[styles.radio, { borderColor: active ? t.primary : t.textSecondary }]}>{active && <View style={[styles.radioDot, { backgroundColor: t.primary }]} />}</View>
-                        <View style={styles.flex}>
-                          <Text style={{ color: t.text, fontSize: 15, fontWeight: '600' }} numberOfLines={1}>
-                            {a.ragioneSociale}
-                          </Text>
-                          <Text style={{ color: t.textSecondary, fontSize: 13 }} numberOfLines={1}>
-                            {a.email}
-                          </Text>
-                        </View>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                <AccountPicker
+                  accounts={accounts}
+                  selected={selected}
+                  color={t.primary}
+                  onSelect={(key) => {
+                    setSelected(key);
+                    clear('password');
+                  }}
+                />
               )}
               <TextField
                 label={accounts.length === 1 ? `Password di ${accounts[0].email}` : 'Password'}
@@ -218,12 +167,12 @@ function Recovery({ onCancel }: { onCancel: () => void }) {
                 value={password}
                 onChangeText={(v) => {
                   setPassword(v);
-                  setError(undefined);
+                  clear('password');
                 }}
-                error={error}
-                shakeKey={shakeKey}
+                error={errors.password}
+                shakeKey={shakeFor('password')}
               />
-              <Button title={busy ? 'Verifica in corso…' : 'Conferma'} onPress={onConfirm} />
+              <Button title="Conferma" onPress={onConfirm} loading={busy} disabled={!password} />
             </>
           )}
 
@@ -245,9 +194,5 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: '800', letterSpacing: -0.3 },
   message: { fontSize: 15, textAlign: 'center', minHeight: 22 },
   recoveryContent: { flexGrow: 1, justifyContent: 'center', gap: 22, paddingHorizontal: 24, paddingVertical: 24 },
-  accounts: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 20, overflow: 'hidden' },
-  accountRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, paddingVertical: 12 },
-  radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  radioDot: { width: 10, height: 10, borderRadius: 5 },
   cancel: { alignSelf: 'center' },
 });
