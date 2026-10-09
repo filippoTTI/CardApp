@@ -30,7 +30,7 @@ export function AccountList() {
     switchAccount(key).catch((e) => Alert.alert('Cambia account', e instanceof Error ? e.message : 'Errore imprevisto'));
   };
   const onRemove = (a: SavedAccount) =>
-    Alert.alert('Rimuovi account', `Vuoi rimuovere l'account ${a.email} presso ${a.ragioneSociale} da questo dispositivo?`, [
+    Alert.alert('Rimuovi account', `Vuoi uscire dall'account ${a.email} presso ${a.ragioneSociale}? Verrà tolto da questo telefono ma non eliminato: potrai riaccedere quando vuoi.`, [
       { text: 'Annulla', style: 'cancel' },
       { text: 'Rimuovi', style: 'destructive', onPress: () => removeAccount(accountKey(a)).then(refresh) },
     ]);

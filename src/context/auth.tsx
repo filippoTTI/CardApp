@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { AppState } from 'react-native';
 
 import { accountKey } from '@/services/accounts';
-import { forgetAccount, listAccounts, refreshSession, restoreSession, signOutRemote, switchAccount as switchAccountRemote, type AuthCliente } from '@/services/auth';
+import { deleteAccountOnServer, forgetAccount, listAccounts, refreshSession, restoreSession, signOutRemote, switchAccount as switchAccountRemote, type AuthCliente } from '@/services/auth';
 
 type AuthContextValue = {
   isSignedIn: boolean;
@@ -24,7 +24,7 @@ type AuthContextValue = {
   /** Dimentica un account salvato; se è quello in uso equivale a uscire. */
   removeAccount: (key: string) => Promise<void>;
   /** Elimina l'account sul server e chiude la sessione. Solleva ApiError se non riesce. */
-  deleteAccount: () => Promise<void>;
+  deleteAccount: (key: string, password: string) => Promise<void>;
   dismissPasskeyOffer: () => void;
 };
 
@@ -129,10 +129,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     [user, leaveActive],
   );
-  const deleteAccount = useCallback(async () => {
-    setPasskeyOffered(false);
-    if (user) await leaveActive(user.accountKey);
-  }, [user, leaveActive]);
+  const deleteAccount = useCallback(
+    async (key: string, password: string) => {
+      // prima il server: se rifiuta (password errata, card ancora assegnate) l'account resta com'e'
+      await deleteAccountOnServer(key, password);
+      setPasskeyOffered(false);
+      await removeAccount(key);
+    },
+    [removeAccount],
+  );
   const dismissPasskeyOffer = useCallback(() => {
     setShouldOfferPasskey(false);
     setPasskeyOffered(true);

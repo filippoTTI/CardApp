@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { ChevronRight, Lock, Mail, Phone, ShieldCheck, Trash2, type LucideIcon } from 'lucide-react-native';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -69,7 +69,7 @@ function summarize(cards: Card[]) {
 export default function ProfileScreen() {
   const t = useTheme();
   const router = useRouter();
-  const { user, deleteAccount } = useAuth();
+  const { user } = useAuth();
   const { accounts } = useCards();
   // il riepilogo riguarda solo le card dell'account in uso, come nome e contatti sopra
   const cards = accounts.find((g) => g.key === user?.accountKey)?.cards ?? [];
@@ -79,22 +79,6 @@ export default function ProfileScreen() {
   const since = memberSince(user?.membroDal);
   const rows = user ? infoRows(user) : [];
   const sum = summarize(cards);
-
-  const confirmDelete = () =>
-    Alert.alert(
-      'Elimina account',
-      "Verranno eliminati il tuo accesso e i dati del profilo. Le card assegnate dai negozi restano di loro proprietà. L'azione non può essere annullata.",
-      [
-        { text: 'Annulla', style: 'cancel' },
-        {
-          text: 'Elimina',
-          style: 'destructive',
-          onPress: () => {
-            deleteAccount().catch((e) => Alert.alert('Elimina account', e instanceof Error ? e.message : 'Errore imprevisto'));
-          },
-        },
-      ],
-    );
 
   const stats = [
     { label: 'Card', value: String(sum.cards) },
@@ -234,7 +218,7 @@ export default function ProfileScreen() {
           <Animated.View entering={FadeInDown.delay(800).duration(450)} style={styles.danger}>
             <Pressable
               accessibilityRole="button"
-              onPress={confirmDelete}
+              onPress={() => router.push({ pathname: '/delete-account' } as never)}
               hitSlop={8}
               style={({ pressed }) => [styles.deleteBtn, { opacity: pressed ? 0.6 : 1 }]}>
               <Trash2 size={18} color={t.danger} strokeWidth={2.2} />

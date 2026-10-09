@@ -258,10 +258,13 @@ export async function resetLocalAccounts(): Promise<void> {
   await clearAccounts();
 }
 
-/** Elimina dal dispositivo l'account in uso (non cancella nulla sul cloud). */
-export async function deleteAccountRemote(): Promise<void> {
-  const key = session?.cliente.accountKey;
-  if (key) await forgetAccount(key);
+/**
+ * Elimina definitivamente sul server un account salvato (anche non in uso), riconfermandone la password: vengono eliminati
+ * il login, i dati presso l'esercente e l'anagrafica del gestionale card. Il server rifiuta (ApiError con il motivo) se la
+ * password è errata o se il cliente ha ancora card assegnate. Il chiamante poi lo toglie anche dal telefono.
+ */
+export async function deleteAccountOnServer(key: string, password: string): Promise<void> {
+  await cloudAuthedPostFor(key, '/AUC/EliminaAccountCliente', { pwd: password });
 }
 
 /** Esce dall'account in uso: gli account restano salvati ma all'avvio si riapre il login. */

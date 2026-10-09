@@ -1,4 +1,3 @@
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Link, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -13,7 +12,6 @@ import { useTheme } from '@/hooks/use-theme';
 import { accountKey } from '@/services/accounts';
 import { ApiError } from '@/services/api';
 import { fetchEsercente, listAccounts, signInWithPassword, switchAccount, type SavedAccount } from '@/services/auth';
-import { isPasskeySupported } from '@/services/passkey';
 
 export default function LoginScreen() {
   const t = useTheme();
@@ -124,11 +122,6 @@ export default function LoginScreen() {
       <Link href={{ pathname: '/forgot-password', params: { email, ...(codEsercente ? { cod: codEsercente } : {}) } } as never} style={{ color: t.textSecondary, textAlign: 'center' }}>
         Password dimenticata?
       </Link>
-
-      {isPasskeySupported() && (
-        // TODO: collegare a signInWithPasskey() quando ci sarà il backend
-        <Button title="Accedi con passkey" variant="social" renderIcon={(c) => <MaterialCommunityIcons name="face-recognition" size={22} color={c} />} onPress={() => {}} />
-      )}
 
       {hasSocialLogin && (
         <>

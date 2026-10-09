@@ -266,7 +266,29 @@ export function FlipCard({ card, onOpenDetails }: { card: Card; onOpenDetails?: 
     [setCardFlipped],
   );
 
+  // Una card bloccata non mostra il QR: non si gira. Se si blocca mentre è girata, torna sul fronte.
+  const closeBack = () => {
+    setFlipped(false);
+    flippedRef.current = false;
+    setCardFlipped(false);
+    clearTimeout(boostTimer.current);
+    if (boosted.current) {
+      boosted.current = false;
+      restoreBrightness();
+    }
+    flip.set(withTiming(0, { duration: FLIP_MS, easing: Easing.inOut(Easing.cubic) }));
+  };
+  useEffect(() => {
+    // reagisce al cambio di stato della card (blocco dal server)
+    if (card.blocked && flippedRef.current) closeBack();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [card.blocked]);
+
   const toggle = () => {
+    if (card.blocked) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
     const next = !flipped;
     setFlipped(next);
     flippedRef.current = next;
@@ -301,7 +323,7 @@ export function FlipCard({ card, onOpenDetails }: { card: Card; onOpenDetails?: 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={flipped ? 'Mostra fronte della card' : 'Mostra QR code della card'}
+      accessibilityLabel={card.blocked ? 'Card bloccata: il QR code non è disponibile' : flipped ? 'Mostra fronte della card' : 'Mostra QR code della card'}
       onPress={toggle}
       onPressIn={() => press.set(withTiming(1, { duration: 120 }))}
       onPressOut={() => press.set(withTiming(0, { duration: 180 }))}
@@ -373,7 +395,7 @@ export function FlipCard({ card, onOpenDetails }: { card: Card; onOpenDetails?: 
               <CardBackground palette={palette} id={`b${card.id}`} width={width} alertColor={alertColor} />
               <View style={[styles.content, styles.backContent]}>
                 <View style={{ backgroundColor: palette.qrBox, padding: 10 * k, borderRadius: 16 * k }}>
-                  <QrCode value={buildQrPayload(card)} size={112 * k} />
+                  {!card.blocked && <QrCode value={buildQrPayload(card)} size={112 * k} />}
                 </View>
                 <Text style={[styles.codeSmall, { color: palette.text, fontSize: 15 * k }]}>{card.code}</Text>
               </View>
