@@ -1,14 +1,17 @@
-import { authedGet, authedPost } from '@/services/auth';
+import { cloudAuthedPostFor } from '@/services/auth';
 import type { Card, CardBalance, CardCounter, CardKind, CardMovement, CounterType } from '@/types/card';
 
 type ApiContatore = {
+  /** 0 = card, 1 = esercente, 2 = circuito. */
   tipoAssociazione: number;
+  /** 0 = punti (l'unico tipo gestito dal gestionale per ora). */
   tipoContatore: number;
-  /** standard, euro, punti, sconto oppure altro. */
-  tipo: string;
+  /** Ragione sociale dell'esercente o descrizione del circuito a cui appartiene il contatore. */
   nome: string | null;
-  valore: number;
-  limite: number | null;
+  conta: number;
+  contatoreLimite: number | null;
+  contatoreDati: string | null;
+  /** Contatore dell'esercente che ha emesso la card. */
   principale: boolean;
 };
 
@@ -20,9 +23,11 @@ type ApiCard = {
   note: string | null;
   dati: string | null;
   codiceMaster: string | null;
+  /** Formato yyyyMMdd. */
   dataInserimento: string;
+  /** Formato yyyyMMddHHmmss. */
   ultimoUtilizzo: string;
-  emittente: { ragioneSociale: string; citta: string | null };
+  emittente: { ragioneSociale: string; citta: string | null } | null;
   contatori: ApiContatore[];
 };
 
@@ -35,21 +40,21 @@ const COUNTER_TYPES: Record<string, CounterType> = {
   sconto: 'discount',
 };
 
-function toCounter(k: ApiContatore): CardCounter {
-  return { name: k.nome ?? '', type: COUNTER_TYPES[k.tipo] ?? 'other', amount: k.valore, limit: k.limite ?? undefined };
+const TIPO_PUNTI = 0;
+
+function counterType(k: ApiContatore): CounterType {
+  return k.tipoContatore === TIPO_PUNTI ? 'points' : 'other';
 }
 
-/** Saldo mostrato sulla card: l'importo in euro (prima quello dell'esercente emittente, poi uno con valore), altrimenti i punti. */
+function toCounter(k: ApiContatore, fallbackName: string): CardCounter {
+  return { name: k.nome?.trim() || fallbackName, type: counterType(k), amount: k.conta, limit: k.contatoreLimite ?? undefined };
+}
+
+/** Saldo mostrato sulla card: i punti del contatore dell'esercente emittente, altrimenti il primo contatore a punti. */
 function pickBalance(contatori: ApiContatore[]): CardBalance | undefined {
-  const pick = (tipo: string) => {
-    const list = contatori.filter((k) => k.tipo === tipo);
-    return list.find((k) => k.principale) ?? list.find((k) => k.valore !== 0) ?? list[0];
-  };
-  const euro = pick('euro');
-  if (euro) return { type: 'euro', amount: euro.valore };
-  const punti = pick('punti');
-  if (punti) return { type: 'points', amount: punti.valore };
-  return undefined;
+  const punti = contatori.filter((k) => counterType(k) === 'points');
+  const k = punti.find((c) => c.principale) ?? punti[0];
+  return k ? { type: 'points', amount: k.conta } : undefined;
 }
 
 /** Testo nel campo "Dati" della card che la identifica come gift card (il gestionale non ha un tipo apposito). */
@@ -59,27 +64,16 @@ function isGift(dati: string | null): boolean {
   return dati?.trim().toUpperCase() === GIFT_MARKER;
 }
 
-/**
- * Aspetto della card: gift se il campo "Dati" vale GIFT; poi dai contatori: con il vecchio contatore postpagata
- * (tipo 2) è postpagata, con un importo in euro è prepagata, altrimenti (punti, sconto, nessun saldo) standard.
- */
-function pickKind(contatori: ApiContatore[], dati: string | null): CardKind {
-  if (isGift(dati)) return 'gift';
-  if (contatori.some((k) => k.tipoContatore === 2)) return 'postpaid';
-  if (contatori.some((k) => k.tipo === 'euro')) return 'prepaid';
-  return 'standard';
-}
-
-function toCard(c: ApiCard): Card {
-  const balance = pickBalance(c.contatori);
-  const points = c.contatori.filter((k) => k.tipo === 'punti').reduce((sum, k) => sum + k.valore, 0);
+function toCard(c: ApiCard, accountKey: string, fallbackIssuer: string): Card {
+  const issuerName = c.emittente?.ragioneSociale?.trim() || fallbackIssuer;
+  const kind: CardKind = isGift(c.dati) ? 'gift' : 'standard';
   return {
     id: String(c.idCard),
-    kind: pickKind(c.contatori, c.dati),
+    accountKey,
+    kind,
     code: c.codice,
-    balance,
-    extraPoints: balance?.type === 'euro' && points !== 0 ? points : undefined,
-    issuer: { name: c.emittente.ragioneSociale, city: c.emittente.citta ?? undefined },
+    balance: pickBalance(c.contatori),
+    issuer: { name: issuerName, city: c.emittente?.citta ?? undefined },
     blocked: c.bloccata,
     reference: c.riferimento ?? undefined,
     note: c.note ?? undefined,
@@ -87,15 +81,15 @@ function toCard(c: ApiCard): Card {
     data: isGift(c.dati) ? undefined : (c.dati ?? undefined),
     masterCode: c.codiceMaster ?? undefined,
     createdAt: c.dataInserimento,
-    lastUsedAt: c.ultimoUtilizzo,
-    counters: c.contatori.map(toCounter),
+    lastUsedAt: c.ultimoUtilizzo?.slice(0, 8),
+    counters: c.contatori.map((k) => toCounter(k, issuerName)),
   };
 }
 
-/** Card del cliente collegato alla sessione. */
-export async function fetchCards(): Promise<Card[]> {
-  const res = await authedGet<ApiCardResponse>('/App/Card');
-  return res.card.map(toCard);
+/** Card di un account salvato (chiave esercente + email), tramite il cloud che interroga il gestionale card. */
+export async function fetchCards(accountKey: string, fallbackIssuer = ''): Promise<Card[]> {
+  const res = await cloudAuthedPostFor<ApiCardResponse>(accountKey, '/AUC/CardCliente');
+  return (res.card ?? []).map((c) => toCard(c, accountKey, fallbackIssuer));
 }
 
 type ApiMovimento = {
@@ -123,9 +117,13 @@ const MOVEMENT_KINDS: Record<ApiMovimento['tipo'], CardMovement['kind']> = {
 
 const MOVEMENTS_PAGE_SIZE = 20;
 
-/** Pagina di movimenti di una card del cliente (dal più recente); `page` parte da 1. */
-export async function fetchMovements(cardId: string, page: number): Promise<{ movements: CardMovement[]; total: number }> {
-  const res = await authedGet<ApiMovimentiResponse>(`/App/Movimenti?idCard=${encodeURIComponent(cardId)}&pagina=${page}&dimensione=${MOVEMENTS_PAGE_SIZE}`);
+/** Pagina di movimenti di una card di un account (dal più recente); `page` parte da 1. */
+export async function fetchMovements(accountKey: string, cardId: string, page: number): Promise<{ movements: CardMovement[]; total: number }> {
+  const res = await cloudAuthedPostFor<ApiMovimentiResponse>(accountKey, '/AUC/MovimentiCardCliente', {
+    idCard: Number(cardId),
+    pagina: page,
+    dimensione: MOVEMENTS_PAGE_SIZE,
+  });
   return {
     total: res.totale,
     movements: res.movimenti.map((m) => ({
@@ -156,7 +154,7 @@ type ApiBloccaCardResponse = { cod: number; msg?: string; bloccata: boolean; mod
  * Blocca o sblocca una card del cliente. `message` è valorizzato solo se la card era già nello stato richiesto
  * (es. "la card è già bloccata."); solleva ApiError se l'operazione non riesce.
  */
-export async function setCardBlocked(cardId: string, blocked: boolean): Promise<{ blocked: boolean; message?: string }> {
-  const res = await authedPost<ApiBloccaCardResponse>('/App/BloccaCard', { idCard: Number(cardId), blocca: blocked });
+export async function setCardBlocked(accountKey: string, cardId: string, blocked: boolean): Promise<{ blocked: boolean; message?: string }> {
+  const res = await cloudAuthedPostFor<ApiBloccaCardResponse>(accountKey, '/AUC/BloccaCardCliente', { idCard: Number(cardId), blocca: blocked });
   return { blocked: res.bloccata, message: res.modificata ? undefined : res.msg || undefined };
 }

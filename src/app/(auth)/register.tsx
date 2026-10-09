@@ -4,7 +4,8 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { AuthScreen, Divider, KeyboardAnchor } from '@/components/ui/auth-screen';
 import { Button } from '@/components/ui/button';
-import { SocialButtons } from '@/components/ui/social-buttons';
+import { EsercenteCodeField } from '@/components/ui/esercente-code-field';
+import { hasSocialLogin, SocialButtons } from '@/components/ui/social-buttons';
 import { TextField } from '@/components/ui/text-field';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
@@ -20,6 +21,7 @@ export default function RegisterScreen() {
   const [esercente, setEsercente] = useState<string>();
   const [hasAccounts, setHasAccounts] = useState<boolean | null>(null);
   const [codice, setCodice] = useState('');
+  const [codeName, setCodeName] = useState<string>();
   const [info, setInfo] = useState<string>();
   const [nome, setNome] = useState('');
   const [cognome, setCognome] = useState('');
@@ -46,6 +48,11 @@ export default function RegisterScreen() {
 
   const onRegister = async () => {
     if (busy) return;
+    if (needsCode && !codeName) {
+      setError('Inserisci un codice esercente valido o scansiona il QR');
+      setShakeKey((k) => k + 1);
+      return;
+    }
     if (!cognome.trim()) {
       setError('Il cognome è obbligatorio');
       setShakeKey((k) => k + 1);
@@ -71,7 +78,15 @@ export default function RegisterScreen() {
 
   return (
     <AuthScreen title="Crea account" subtitle={esercente ? `Registrati presso ${esercente}` : 'Registrati in pochi secondi'}>
-      {needsCode && <TextField label="Codice esercente" placeholder="Codice ricevuto dall'esercente" autoCapitalize="characters" autoCorrect={false} value={codice} onChangeText={setCodice} />}
+      {needsCode && <EsercenteCodeField
+          code={codice}
+          name={codeName}
+          onChange={(c, n) => {
+            setCodice(c);
+            setCodeName(n);
+            setError(undefined);
+          }}
+        />}
       <TextField label="Nome" placeholder="Mario" autoComplete="given-name" value={nome} onChangeText={setNome} />
       <TextField
         label="Cognome"
@@ -104,8 +119,12 @@ export default function RegisterScreen() {
         {info ? <Button title="Vai al login" onPress={() => router.replace({ pathname: '/login', params: cod ? { cod } : {} } as never)} /> : <Button title="Registrati" onPress={onRegister} />}
       </KeyboardAnchor>
 
-      <Divider label="oppure continua con" />
-      <SocialButtons />
+      {hasSocialLogin && (
+        <>
+          <Divider label="oppure continua con" />
+          <SocialButtons />
+        </>
+      )}
 
       <View style={styles.footer}>
         <Text style={{ color: t.textSecondary }}>Hai già un account? </Text>

@@ -83,7 +83,7 @@ function MovementRow({ movement, last }: { movement: CardMovement; last: boolean
 }
 
 /** Elenco dei movimenti di una card (ricariche, spese, accrediti), dal più recente, con paginazione. */
-export function CardMovements({ cardId, refreshKey = 0 }: { cardId: string; refreshKey?: number }) {
+export function CardMovements({ accountKey, cardId, refreshKey = 0 }: { accountKey: string; cardId: string; refreshKey?: number }) {
   const t = useTheme();
   const [items, setItems] = useState<CardMovement[]>([]);
   const [total, setTotal] = useState(0);
@@ -94,7 +94,7 @@ export function CardMovements({ cardId, refreshKey = 0 }: { cardId: string; refr
   // prima pagina all'apertura della schermata
   useEffect(() => {
     let active = true;
-    fetchMovements(cardId, 1)
+    fetchMovements(accountKey, cardId, 1)
       .then((res) => {
         if (!active) return;
         setItems(res.movements);
@@ -110,13 +110,13 @@ export function CardMovements({ cardId, refreshKey = 0 }: { cardId: string; refr
     return () => {
       active = false;
     };
-  }, [cardId, refreshKey]);
+  }, [accountKey, cardId, refreshKey]);
 
   const loadMore = async () => {
     if (loading) return;
     setLoading(true);
     try {
-      const res = await fetchMovements(cardId, page + 1);
+      const res = await fetchMovements(accountKey, cardId, page + 1);
       setItems((prev) => [...prev, ...res.movements]);
       setTotal(res.total);
       setPage(page + 1);

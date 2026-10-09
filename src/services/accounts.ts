@@ -73,6 +73,17 @@ export async function setActiveKey(key: string | null): Promise<void> {
   await save({ ...cur, active: key });
 }
 
+/** Aggiorna la password salvata di un account (senza cambiare quello attivo). */
+export async function setAccountPassword(key: string, password: string): Promise<void> {
+  const cur = await load();
+  await save({ ...cur, accounts: cur.accounts.map((a) => (accountKey(a) === key ? { ...a, password } : a)) });
+}
+
+/** Elimina tutti gli account salvati sul dispositivo (non tocca nulla sul cloud). */
+export async function clearAccounts(): Promise<void> {
+  await save({ accounts: [], active: null });
+}
+
 /** Elimina un account salvato; se era quello attivo non resta nessun account attivo. */
 export async function removeAccount(key: string): Promise<void> {
   const cur = await load();

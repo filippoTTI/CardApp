@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { AuthScreen, KeyboardAnchor } from '@/components/ui/auth-screen';
 import { Button } from '@/components/ui/button';
+import { EsercenteCodeField } from '@/components/ui/esercente-code-field';
 import { TextField } from '@/components/ui/text-field';
 import { useTheme } from '@/hooks/use-theme';
 import { ApiError } from '@/services/api';
@@ -17,6 +18,7 @@ export default function ForgotPasswordScreen() {
   const [esercente, setEsercente] = useState<string>();
   const [hasAccounts, setHasAccounts] = useState<boolean | null>(null);
   const [codice, setCodice] = useState('');
+  const [codeName, setCodeName] = useState<string>();
   const [email, setEmail] = useState(emailParam ?? '');
   const [error, setError] = useState<string>();
   const [shakeKey, setShakeKey] = useState(0);
@@ -40,6 +42,11 @@ export default function ForgotPasswordScreen() {
 
   const onSend = async () => {
     if (busy) return;
+    if (needsCode && !codeName) {
+      setError('Inserisci un codice esercente valido o scansiona il QR');
+      setShakeKey((k) => k + 1);
+      return;
+    }
     setBusy(true);
     try {
       await (conferma ? resendConfirmation(email, codEsercente) : requestPasswordReset(email, codEsercente));
@@ -56,7 +63,15 @@ export default function ForgotPasswordScreen() {
     <AuthScreen
       title={conferma ? 'Conferma account' : 'Password dimenticata'}
       subtitle={esercente ? `Account presso ${esercente}` : conferma ? "Reinvia l'email di conferma" : 'Ti inviamo un link per reimpostarla'}>
-      {needsCode && <TextField label="Codice esercente" placeholder="Codice ricevuto dall'esercente" autoCapitalize="characters" autoCorrect={false} value={codice} onChangeText={setCodice} />}
+      {needsCode && <EsercenteCodeField
+          code={codice}
+          name={codeName}
+          onChange={(c, n) => {
+            setCodice(c);
+            setCodeName(n);
+            setError(undefined);
+          }}
+        />}
       <TextField
         label="Email"
         placeholder="nome@esempio.it"

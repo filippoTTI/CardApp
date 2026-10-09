@@ -7,6 +7,8 @@ export type CardKind = 'prepaid' | 'postpaid' | 'standard' | 'gift';
 
 export type Card = {
   id: string;
+  /** Account salvato (esercente + email) da cui arriva la card. */
+  accountKey?: string;
   kind: CardKind;
   /** Codice alfanumerico maiuscolo di 6 caratteri, assegnato dal backend: è anche ciò che viene codificato nel QR. */
   code: string;

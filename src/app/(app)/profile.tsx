@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { ChevronRight, KeyRound, Mail, Phone, ShieldCheck, Trash2, type LucideIcon } from 'lucide-react-native';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ChevronRight, Lock, Mail, Phone, ShieldCheck, Trash2, type LucideIcon } from 'lucide-react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -15,6 +15,7 @@ import { ParallaxView } from '@/components/ui/parallax-view';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { euroFormat, numberFormat } from '@/constants/format';
 import { Radius } from '@/constants/theme';
+import { useAppLock } from '@/context/app-lock';
 import { useAuth } from '@/context/auth';
 import { useCards } from '@/context/cards';
 import { useTheme } from '@/hooks/use-theme';
@@ -69,7 +70,10 @@ export default function ProfileScreen() {
   const t = useTheme();
   const router = useRouter();
   const { user, deleteAccount } = useAuth();
-  const { cards } = useCards();
+  const { accounts } = useCards();
+  // il riepilogo riguarda solo le card dell'account in uso, come nome e contatti sopra
+  const cards = accounts.find((g) => g.key === user?.accountKey)?.cards ?? [];
+  const { enabled: lockEnabled, biometricAvailable, biometricEnabled, setBiometricEnabled } = useAppLock();
   const fullName = user ? `${user.nome} ${user.cognome}`.trim() : '';
   const initials = user ? `${user.nome.charAt(0)}${user.cognome.charAt(0)}`.toUpperCase() || user.email.charAt(0).toUpperCase() : '';
   const since = memberSince(user?.membroDal);
@@ -114,7 +118,7 @@ export default function ProfileScreen() {
           />
         </View>
 
-        <View style={styles.body}>
+        <ScrollView style={styles.flex} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
           <Animated.View entering={FadeInDown.delay(100).duration(550)}>
             {/* Parallasse con l'inclinazione del telefono: avatar più "vicino" (si muove di più) dei pannelli. */}
             <ParallaxView shift={7} style={styles.hero}>
@@ -171,28 +175,61 @@ export default function ProfileScreen() {
 
           <AccountList />
 
-          {user?.accessoPassword && (
-            <Animated.View entering={FadeInDown.delay(600).duration(450)}>
-              <ParallaxView shift={4}>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => router.push({ pathname: '/change-password' } as never)}
-                  style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
-                  <GlassPanel radius={Radius.lg}>
+          {/* Codice di sblocco dell'app: vale per tutti gli account e resta solo su questo dispositivo. */}
+          <Animated.View entering={FadeInDown.delay(600).duration(450)}>
+            <ParallaxView shift={4}>
+              <GlassPanel radius={Radius.lg}>
+                <View style={styles.row}>
+                  <View style={[styles.tile, { backgroundColor: '#8B5CF6' }]}>
+                    <Lock size={18} color="#FFFFFF" strokeWidth={2.2} />
+                  </View>
+                  <View style={styles.rowText}>
+                    <Text style={{ color: t.text, fontSize: 16, fontWeight: '500' }}>Proteggi app</Text>
+                    <Text style={{ color: t.textSecondary, fontSize: 12 }}>{"Codice di 4 cifre all'apertura"}</Text>
+                  </View>
+                  <Switch
+                    accessibilityLabel="Proteggi app con un codice"
+                    value={lockEnabled}
+                    onValueChange={() => router.push({ pathname: '/pin-setup', params: { mode: lockEnabled ? 'disable' : 'set' } } as never)}
+                  />
+                </View>
+                {lockEnabled && biometricAvailable && (
+                  <>
+                    <View style={[styles.separator, { backgroundColor: t.border }]} />
                     <View style={styles.row}>
-                      <View style={[styles.tile, { backgroundColor: '#8B5CF6' }]}>
-                        <KeyRound size={18} color="#FFFFFF" strokeWidth={2.2} />
-                      </View>
+                      <View style={styles.tileSpacer} />
                       <View style={styles.rowText}>
-                        <Text style={{ color: t.text, fontSize: 16, fontWeight: '500' }}>Cambia password</Text>
+                        <Text style={{ color: t.text, fontSize: 16, fontWeight: '500' }}>Sblocco biometrico</Text>
+                        <Text style={{ color: t.textSecondary, fontSize: 12 }}>Face ID o impronta al posto del codice</Text>
+                      </View>
+                      <Switch
+                        accessibilityLabel="Sblocca con la biometria"
+                        value={biometricEnabled}
+                        onValueChange={(v) => {
+                          void setBiometricEnabled(v);
+                        }}
+                      />
+                    </View>
+                  </>
+                )}
+                {lockEnabled && (
+                  <>
+                    <View style={[styles.separator, { backgroundColor: t.border }]} />
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => router.push({ pathname: '/pin-setup', params: { mode: 'change' } } as never)}
+                      style={({ pressed }) => [styles.row, { opacity: pressed ? 0.6 : 1 }]}>
+                      <View style={styles.tileSpacer} />
+                      <View style={styles.rowText}>
+                        <Text style={{ color: t.text, fontSize: 16, fontWeight: '500' }}>Cambia codice</Text>
                       </View>
                       <ChevronRight size={20} color={t.textSecondary} />
-                    </View>
-                  </GlassPanel>
-                </Pressable>
-              </ParallaxView>
-            </Animated.View>
-          )}
+                    </Pressable>
+                  </>
+                )}
+              </GlassPanel>
+            </ParallaxView>
+          </Animated.View>
 
           <Animated.View entering={FadeInDown.delay(800).duration(450)} style={styles.danger}>
             <Pressable
@@ -204,7 +241,7 @@ export default function ProfileScreen() {
               <Text style={{ color: t.danger, fontSize: 15, fontWeight: '600' }}>Elimina account</Text>
             </Pressable>
           </Animated.View>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     </View>
   );
@@ -213,7 +250,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   container: { flex: 1, paddingHorizontal: 20 },
-  body: { flex: 1, gap: 18 },
+  body: { flexGrow: 1, gap: 18, paddingBottom: 16 },
   hero: { alignItems: 'center', gap: 10, marginTop: 20, marginBottom: 6 },
   name: { fontSize: 26, fontWeight: '800', letterSpacing: -0.3, marginTop: 6 },
   pill: { paddingHorizontal: 14, paddingVertical: 6 },
@@ -223,6 +260,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 24, paddingVertical: 14 },
   tile: { width: 36, height: 36, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   rowText: { flex: 1, gap: 2 },
+  tileSpacer: { width: 36, height: 36 },
   danger: { marginTop: 'auto', alignItems: 'center', paddingBottom: 8 },
   deleteBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 16 },
   separator: { height: StyleSheet.hairlineWidth, marginLeft: 74 },

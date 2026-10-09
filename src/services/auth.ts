@@ -1,5 +1,5 @@
-import { accountKey, getActiveAccount, listAccounts, removeAccount, setActiveKey, upsertAccount, type SavedAccount } from '@/services/accounts';
-import { ApiError, apiGet, apiPost, cloudGet, cloudPost } from '@/services/api';
+import { accountKey, clearAccounts, getActiveAccount, listAccounts, removeAccount, setAccountPassword, setActiveKey, upsertAccount, type SavedAccount } from '@/services/accounts';
+import { ApiError, apiGet, apiPost, cloudGet, cloudPost, cloudPostAuth } from '@/services/api';
 
 export type AuthCliente = {
   idAna: number;
@@ -91,6 +91,7 @@ export { listAccounts, type SavedAccount };
 
 /** Elimina un account salvato dal dispositivo; se era quello in uso chiude anche la sessione. */
 export async function forgetAccount(key: string): Promise<void> {
+  otherTokens.delete(key);
   if (session?.cliente.accountKey === key) session = null;
   await removeAccount(key);
 }
@@ -159,7 +160,41 @@ export function authedPost<T extends { cod: number; msg?: string }>(path: string
   return authed((token) => apiPost<T>(path, body, token));
 }
 
-const NON_DISPONIBILE = 'Funzione non ancora disponibile con il nuovo accesso';
+/** POST autenticato al servizio cloud clienti (con rinnovo del token se scaduto). */
+export function cloudAuthedPost<T extends { cod: number; msg?: string }>(path: string, body: unknown = {}): Promise<T> {
+  return authed((token) => cloudPostAuth<T>(path, body, token));
+}
+
+/** Token degli account salvati diversi da quello in uso (la scadenza lato server è di 5 minuti). */
+const otherTokens = new Map<string, { token: string; at: number }>();
+const OTHER_TOKEN_TTL_MS = 4 * 60 * 1000;
+
+async function tokenForAccount(acc: SavedAccount, force: boolean): Promise<string> {
+  const key = accountKey(acc);
+  const hit = otherTokens.get(key);
+  if (!force && hit && Date.now() - hit.at < OTHER_TOKEN_TTL_MS) return hit.token;
+  const login = await cloudPost<LoginResponse>('/AUC/LoginCliente', { CodEsercente: acc.codEsercente, User: acc.email, PWD: acc.password });
+  otherTokens.set(key, { token: login.token, at: Date.now() });
+  return login.token;
+}
+
+/**
+ * POST autenticato al cloud per conto di un qualsiasi account salvato (non solo quello in uso): per l'account in uso
+ * usa la sessione corrente, per gli altri fa il login con le credenziali salvate e rinnova il token se scaduto.
+ */
+export async function cloudAuthedPostFor<T extends { cod: number; msg?: string }>(key: string, path: string, body: unknown = {}): Promise<T> {
+  if (session?.cliente.accountKey === key) return cloudAuthedPost<T>(path, body);
+  const acc = (await listAccounts()).find((a) => accountKey(a) === key);
+  if (!acc) throw new ApiError(-1, 'Account non trovato');
+  try {
+    return await cloudPostAuth<T>(path, body, await tokenForAccount(acc, false));
+  } catch (e) {
+    if (!(e instanceof ApiError) || e.cod !== 401) throw e;
+  }
+  return cloudPostAuth<T>(path, body, await tokenForAccount(acc, true));
+}
+
+const NON_DISPONIBILE ='Funzione non ancora disponibile con il nuovo accesso';
 
 type RegistraResponse = { cod: number; msg?: string; idCliente: number; emailDaConfermare: boolean };
 
@@ -186,20 +221,41 @@ export async function requestPasswordReset(email: string, codEsercente: string):
   await cloudPost('/CLE/ResetPwdClienteApp', { CodEsercente: esercente.codEsercente, EMail: email.trim() });
 }
 
+/** Invia il link per reimpostare la password di un account salvato (chiave esercente + email), senza richiedere di nuovo i dati. */
+export async function requestPasswordResetForAccount(key: string): Promise<void> {
+  const acc = (await listAccounts()).find((a) => accountKey(a) === key);
+  if (!acc) throw new ApiError(-1, 'Account non trovato');
+  await cloudPost('/CLE/ResetPwdClienteApp', { CodEsercente: acc.codEsercente, EMail: acc.email });
+}
+
 /** Reinvia l'email di conferma dell'account (risponde ok anche se l'account non esiste). */
 export async function resendConfirmation(email: string, codEsercente: string): Promise<void> {
   const esercente = await fetchEsercente(codEsercente);
   await cloudPost('/CLE/ReinoltraConfermaClienteApp', { CodEsercente: esercente.codEsercente, EMail: email.trim() });
 }
 
-/** Google non è previsto per ora con il login cloud. */
-export async function signInWithGoogle(): Promise<AuthSession | null> {
-  throw new ApiError(-1, NON_DISPONIBILE);
-}
-
 /** TODO: sostituito dal reset password via email. */
 export async function changePassword(_currentPassword: string, _newPassword: string): Promise<void> {
   throw new ApiError(-1, NON_DISPONIBILE);
+}
+
+/**
+ * Controlla con il cloud la password digitata per un account salvato, senza aprire sessioni. Se è giusta la salva (potrebbe
+ * essere cambiata rispetto a quella memorizzata). Solleva ApiError: cod -1 server non raggiungibile, 429 troppe richieste,
+ * altro = credenziali rifiutate.
+ */
+export async function verifyAccountPassword(key: string, password: string): Promise<void> {
+  const acc = (await listAccounts()).find((a) => accountKey(a) === key);
+  if (!acc) throw new ApiError(-1, 'Account non trovato');
+  await cloudPost<LoginResponse>('/AUC/LoginCliente', { CodEsercente: acc.codEsercente, User: acc.email, PWD: password });
+  if (acc.password !== password) await setAccountPassword(key, password);
+}
+
+/** Rimuove dal dispositivo tutti gli account salvati e le sessioni. Non cancella nulla sul cloud. */
+export async function resetLocalAccounts(): Promise<void> {
+  session = null;
+  otherTokens.clear();
+  await clearAccounts();
 }
 
 /** Elimina dal dispositivo l'account in uso (non cancella nulla sul cloud). */

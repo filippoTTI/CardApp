@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { AuthScreen, KeyboardAnchor } from '@/components/ui/auth-screen';
 import { Button } from '@/components/ui/button';
+import { EsercenteCodeField } from '@/components/ui/esercente-code-field';
 import { TextField } from '@/components/ui/text-field';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
@@ -19,6 +20,7 @@ export default function AddAccountScreen() {
   const { cod } = useLocalSearchParams<{ cod?: string }>();
   const [esercente, setEsercente] = useState<string>();
   const [codice, setCodice] = useState('');
+  const [codeName, setCodeName] = useState<string>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string>();
@@ -34,6 +36,11 @@ export default function AddAccountScreen() {
 
   const onAdd = async () => {
     if (busy) return;
+    if (!cod && !codeName) {
+      setError('Inserisci un codice esercente valido o scansiona il QR');
+      setShakeKey((k) => k + 1);
+      return;
+    }
     setBusy(true);
     try {
       const { cliente } = await signInWithPassword(email, password, cod ?? codice);
@@ -49,7 +56,15 @@ export default function AddAccountScreen() {
 
   return (
     <AuthScreen title="Aggiungi account" subtitle={esercente ? `Accedi a ${esercente}` : 'Accedi presso un altro esercente'}>
-      {!cod && <TextField label="Codice esercente" placeholder="Codice ricevuto dall'esercente" autoCapitalize="characters" autoCorrect={false} value={codice} onChangeText={setCodice} />}
+      {!cod && <EsercenteCodeField
+          code={codice}
+          name={codeName}
+          onChange={(c, n) => {
+            setCodice(c);
+            setCodeName(n);
+            setError(undefined);
+          }}
+        />}
       <TextField label="Email" placeholder="nome@esempio.it" keyboardType="email-address" autoCapitalize="none" autoComplete="email" value={email} onChangeText={setEmail} />
       <TextField
         label="Password"

@@ -77,6 +77,11 @@ export function cloudPost<T extends Envelope>(path: string, body: unknown): Prom
   return request<T>('POST', path, body, undefined, CLOUD_URL);
 }
 
+/** POST JSON al servizio cloud clienti con il token cliente nell'intestazione Authorization (401 = token scaduto o non valido). */
+export function cloudPostAuth<T extends Envelope>(path: string, body: unknown, accessToken: string): Promise<T> {
+  return request<T>('POST', path, body, accessToken, CLOUD_URL);
+}
+
 /** GET al servizio cloud clienti (senza Authorization: l'eventuale token va nel percorso). */
 export function cloudGet<T extends Envelope>(path: string): Promise<T> {
   return request<T>('GET', path, undefined, undefined, CLOUD_URL);

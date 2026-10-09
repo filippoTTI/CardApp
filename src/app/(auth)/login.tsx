@@ -5,7 +5,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AuthScreen, Divider, KeyboardAnchor } from '@/components/ui/auth-screen';
 import { Button } from '@/components/ui/button';
-import { SocialButtons } from '@/components/ui/social-buttons';
+import { EsercenteCodeField } from '@/components/ui/esercente-code-field';
+import { hasSocialLogin, SocialButtons } from '@/components/ui/social-buttons';
 import { TextField } from '@/components/ui/text-field';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
@@ -22,6 +23,7 @@ export default function LoginScreen() {
   const [saved, setSaved] = useState<SavedAccount[] | null>(null);
   const [esercente, setEsercente] = useState<string>();
   const [codice, setCodice] = useState('');
+  const [codeName, setCodeName] = useState<string>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string>();
@@ -60,6 +62,11 @@ export default function LoginScreen() {
 
   const onLogin = async () => {
     if (busy) return;
+    if (needsCode && !codeName) {
+      setError('Inserisci un codice esercente valido o scansiona il QR');
+      setShakeKey((k) => k + 1);
+      return;
+    }
     setBusy(true);
     try {
       const { cliente } = await signInWithPassword(email, password, codEsercente);
@@ -81,7 +88,15 @@ export default function LoginScreen() {
             <Text style={{ color: t.textSecondary, fontSize: 13 }}>{a.email}</Text>
           </Pressable>
         ))}
-      {needsCode && <TextField label="Codice esercente" placeholder="Codice ricevuto dall'esercente" autoCapitalize="characters" autoCorrect={false} value={codice} onChangeText={setCodice} />}
+      {needsCode && <EsercenteCodeField
+          code={codice}
+          name={codeName}
+          onChange={(c, n) => {
+            setCodice(c);
+            setCodeName(n);
+            setError(undefined);
+          }}
+        />}
       <TextField label="Email" placeholder="nome@esempio.it" keyboardType="email-address" autoCapitalize="none" autoComplete="email" value={email} onChangeText={setEmail} />
       <TextField
         label="Password"
@@ -115,8 +130,12 @@ export default function LoginScreen() {
         <Button title="Accedi con passkey" variant="social" renderIcon={(c) => <MaterialCommunityIcons name="face-recognition" size={22} color={c} />} onPress={() => {}} />
       )}
 
-      <Divider label="oppure continua con" />
-      <SocialButtons />
+      {hasSocialLogin && (
+        <>
+          <Divider label="oppure continua con" />
+          <SocialButtons />
+        </>
+      )}
 
       <View style={styles.footer}>
         <Text style={{ color: t.textSecondary }}>Non hai un account? </Text>

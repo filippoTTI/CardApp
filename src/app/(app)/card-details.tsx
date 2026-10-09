@@ -177,7 +177,7 @@ export default function CardDetailsScreen() {
               </GlassPanel>
             </Animated.View>
             <Animated.View entering={FadeInDown.delay(380).duration(450)}>
-              <CardMovements cardId={card.id} refreshKey={refreshKey} />
+              <CardMovements accountKey={card.accountKey ?? ''} cardId={card.id} refreshKey={refreshKey} />
             </Animated.View>
             <Animated.View entering={FadeInDown.delay(480).duration(450)}>
               <Pressable
