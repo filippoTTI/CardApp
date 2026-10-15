@@ -21,7 +21,10 @@ type ApiCard = {
   bloccata: boolean;
   riferimento: string | null;
   note: string | null;
-  dati: string | null;
+  /** Colore scelto dall'esercente (es. "#1f4634"). */
+  colore: string | null;
+  /** Standard, PrePagata, PostPagata o GiftCard. */
+  tipo: string | null;
   codiceMaster: string | null;
   /** Formato yyyyMMdd. */
   dataInserimento: string;
@@ -57,16 +60,21 @@ function pickBalance(contatori: ApiContatore[]): CardBalance | undefined {
   return k ? { type: 'points', amount: k.conta } : undefined;
 }
 
-/** Testo nel campo "Dati" della card che la identifica come gift card (il gestionale non ha un tipo apposito). */
-const GIFT_MARKER = 'GIFT';
+/** Tipo del gestionale (CARDDETTAGLIO) -> tipo dell'app; una card senza dettaglio è standard. */
+const KINDS: Record<string, CardKind> = {
+  prepagata: 'prepaid',
+  postpagata: 'postpaid',
+  giftcard: 'gift',
+  standard: 'standard',
+};
 
-function isGift(dati: string | null): boolean {
-  return dati?.trim().toUpperCase() === GIFT_MARKER;
+function cardKind(tipo: string | null): CardKind {
+  return KINDS[tipo?.trim().toLowerCase() ?? ''] ?? 'standard';
 }
 
 function toCard(c: ApiCard, accountKey: string, fallbackIssuer: string): Card {
   const issuerName = c.emittente?.ragioneSociale?.trim() || fallbackIssuer;
-  const kind: CardKind = isGift(c.dati) ? 'gift' : 'standard';
+  const kind = cardKind(c.tipo);
   return {
     id: String(c.idCard),
     accountKey,
@@ -77,8 +85,7 @@ function toCard(c: ApiCard, accountKey: string, fallbackIssuer: string): Card {
     blocked: c.bloccata,
     reference: c.riferimento ?? undefined,
     note: c.note ?? undefined,
-    // il testo che marca la gift card non è un dato da mostrare
-    data: isGift(c.dati) ? undefined : (c.dati ?? undefined),
+    color: c.colore?.trim() || undefined,
     masterCode: c.codiceMaster ?? undefined,
     createdAt: c.dataInserimento,
     lastUsedAt: c.ultimoUtilizzo?.slice(0, 8),

@@ -45,7 +45,6 @@ function infoRows(card: Card): Row[] {
     card.issuer ? { label: 'Emessa da', value: card.issuer.city ? `${card.issuer.name} (${card.issuer.city})` : card.issuer.name } : undefined,
     card.reference ? { label: 'Riferimento', value: card.reference } : undefined,
     card.note ? { label: 'Note', value: card.note } : undefined,
-    card.data ? { label: 'Dati', value: card.data } : undefined,
     card.masterCode ? { label: 'Card master', value: card.masterCode } : undefined,
     formatDate(card.createdAt) ? { label: 'Inserita il', value: formatDate(card.createdAt)! } : undefined,
     formatDate(card.lastUsedAt) ? { label: 'Ultimo utilizzo', value: formatDate(card.lastUsedAt)! } : undefined,

@@ -17,6 +17,7 @@ import { boostBrightness, restoreBrightness } from '@/services/brightness';
 import { CARD_KIND_LABEL, euroFormat, numberFormat } from '@/constants/format';
 import { useBackgroundFocus } from '@/context/background-focus';
 import { useParallax } from '@/context/parallax';
+import { paletteFromColor } from '@/constants/card-color';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
 import { buildQrPayload } from '@/services/qr';
@@ -243,7 +244,9 @@ function formatBalance(balance: CardBalance): { value: string; unit: string } {
  * tipografia grande. Da ferma resta dritta; al tocco si gira mostrando il QR generato dal codice.
  */
 export function FlipCard({ card, onOpenDetails }: { card: Card; onOpenDetails?: () => void }) {
-  const palette = PALETTES[card.kind][useColorScheme() === 'dark' ? 'dark' : 'light'];
+  const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
+  // il colore scelto dall'esercente ha la precedenza; senza colore valido vale la palette del tipo
+  const palette = paletteFromColor(card.color, scheme) ?? PALETTES[card.kind][scheme];
   const theme = useTheme();
   const [width, setWidth] = useState(0);
   const [flipped, setFlipped] = useState(false);

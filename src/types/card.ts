@@ -19,8 +19,8 @@ export type Card = {
   blocked?: boolean;
   reference?: string;
   note?: string;
-  /** Dati aggiuntivi associati alla card dall'esercente. */
-  data?: string;
+  /** Colore della card scelto dall'esercente (esadecimale, es. "#1f4634"); assente se non impostato. */
+  color?: string;
   /** Codice della card master (i movimenti sono sui suoi contatori). */
   masterCode?: string;
   /** Date in formato yyyyMMdd. */
