@@ -65,7 +65,13 @@ export default function HomeScreen() {
             <CardsSkeleton />
           </View>
         ) : !multi && cards.length === 0 && !accounts[0]?.error ? (
-          <EmptyCards />
+          // anche senza card si può tirare giù per aggiornare: le card assegnate nel frattempo compaiono
+          <ScrollView
+            contentContainerStyle={styles.flexGrow}
+            showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+            <EmptyCards />
+          </ScrollView>
         ) : (
           <View style={styles.flex}>
             {/* Maschera: i contenuti sfumano in trasparenza sotto l'header e in fondo allo schermo mentre scorrono (funziona sopra lo sfondo animato). */}
@@ -129,6 +135,7 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  flexGrow: { flexGrow: 1 },
   // Stesso padding della lista reale, così le card scheletro occupano la posizione delle card vere.
   skeleton: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
   fade: { height: 36 },

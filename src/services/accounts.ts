@@ -9,7 +9,8 @@ export type SavedAccount = {
   password: string;
 };
 
-type Stored = { accounts: SavedAccount[]; active: string | null };
+/** `last`: ultimo account usato, anche dopo l'uscita (`active` torna null): è quello proposto al login. */
+type Stored = { accounts: SavedAccount[]; active: string | null; last: string | null };
 
 /**
  * Le credenziali stanno nell'archivio sicuro leggibile solo a telefono sbloccato e mai trasferito su altri dispositivi
@@ -24,7 +25,7 @@ let cache: Stored | null = null;
 
 function parse(raw: string): Stored {
   const parsed = JSON.parse(raw) as Stored;
-  return { accounts: parsed.accounts ?? [], active: parsed.active ?? null };
+  return { accounts: parsed.accounts ?? [], active: parsed.active ?? null, last: parsed.last ?? parsed.active ?? null };
 }
 
 async function migrateLegacy(): Promise<Stored | null> {
@@ -53,7 +54,7 @@ async function load(): Promise<Stored> {
   } catch {
     // archivio non disponibile (es. web) o contenuto illeggibile: si riparte senza account salvati
   }
-  cache = { accounts: [], active: null };
+  cache = { accounts: [], active: null, last: null };
   return cache;
 }
 
@@ -86,13 +87,19 @@ export async function upsertAccount(account: SavedAccount): Promise<void> {
   const key = accountKey(account);
   const exists = cur.accounts.some((a) => accountKey(a) === key);
   const accounts = exists ? cur.accounts.map((a) => (accountKey(a) === key ? account : a)) : [...cur.accounts, account];
-  await save({ accounts, active: key });
+  await save({ accounts, active: key, last: key });
 }
 
 /** Account attivo (null = nessuno: all'avvio si apre il login). Gli account restano salvati. */
 export async function setActiveKey(key: string | null): Promise<void> {
   const cur = await load();
-  await save({ ...cur, active: key });
+  await save({ ...cur, active: key, last: key ?? cur.last });
+}
+
+/** Chiave dell'ultimo account usato (anche se si è usciti), se è ancora salvato. */
+export async function getLastKey(): Promise<string | null> {
+  const { accounts, last } = await load();
+  return accounts.some((a) => accountKey(a) === last) ? last : null;
 }
 
 /** Aggiorna la password salvata di un account (senza cambiare quello attivo). */
@@ -103,11 +110,11 @@ export async function setAccountPassword(key: string, password: string): Promise
 
 /** Elimina tutti gli account salvati sul dispositivo (non tocca nulla sul cloud). */
 export async function clearAccounts(): Promise<void> {
-  await save({ accounts: [], active: null });
+  await save({ accounts: [], active: null, last: null });
 }
 
 /** Elimina un account salvato; se era quello attivo non resta nessun account attivo. */
 export async function removeAccount(key: string): Promise<void> {
   const cur = await load();
-  await save({ accounts: cur.accounts.filter((a) => accountKey(a) !== key), active: cur.active === key ? null : cur.active });
+  await save({ accounts: cur.accounts.filter((a) => accountKey(a) !== key), active: cur.active === key ? null : cur.active, last: cur.last === key ? null : cur.last });
 }

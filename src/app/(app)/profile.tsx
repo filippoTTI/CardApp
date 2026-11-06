@@ -1,4 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
+import MaskedView from '@react-native-masked-view/masked-view';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { ChevronRight, Lock, Mail, Phone, Store, Trash2, type LucideIcon } from 'lucide-react-native';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
@@ -65,7 +67,7 @@ export default function ProfileScreen() {
     <View style={styles.flex}>
       <AnimatedBackground variant="rich" />
       <SafeAreaView style={styles.container}>
-        <View>
+        <View style={styles.header}>
           <ScreenHeader
             title="Profilo"
             left={
@@ -77,6 +79,16 @@ export default function ProfileScreen() {
           />
         </View>
 
+        {/* Maschera: i contenuti sfumano in trasparenza sotto l'header e in fondo allo schermo mentre scorrono (come nella home). */}
+        <MaskedView
+          style={[styles.flex, styles.underHeader]}
+          maskElement={
+            <View style={styles.flex}>
+              <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,1)']} style={styles.fade} />
+              <View style={styles.opaque} />
+              <LinearGradient colors={['rgba(0,0,0,1)', 'rgba(0,0,0,0)']} style={styles.fadeBottom} />
+            </View>
+          }>
         <ScrollView style={styles.flex} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
           <Animated.View entering={FadeInDown.delay(100).duration(550)}>
             {/* Parallasse con l'inclinazione del telefono: avatar più "vicino" (si muove di più) dei pannelli. */}
@@ -110,7 +122,7 @@ export default function ProfileScreen() {
 
           <Animated.View entering={FadeInDown.delay(400).duration(450)}>
             <ParallaxView shift={4}>
-              <GlassPanel radius={Radius.lg}>
+              <GlassPanel radius={Radius.lg} style={styles.card}>
                 {rows.map(({ Icon, tile, label, value }, i) => (
                   <Animated.View key={`${user?.accountKey}-${label}`} entering={FadeInDown.delay(480 + i * 90).duration(400)}>
                     <View style={styles.row}>
@@ -136,7 +148,7 @@ export default function ProfileScreen() {
           {/* Codice di sblocco dell'app: vale per tutti gli account e resta solo su questo dispositivo. */}
           <Animated.View entering={FadeInDown.delay(600).duration(450)}>
             <ParallaxView shift={4}>
-              <GlassPanel radius={Radius.lg}>
+              <GlassPanel radius={Radius.lg} style={styles.card}>
                 <View style={styles.row}>
                   <View style={[styles.tile, { backgroundColor: '#8B5CF6' }]}>
                     <Lock size={18} color="#FFFFFF" strokeWidth={2.2} />
@@ -200,6 +212,7 @@ export default function ProfileScreen() {
             </Pressable>
           </Animated.View>
         </ScrollView>
+        </MaskedView>
       </SafeAreaView>
     </View>
   );
@@ -208,12 +221,19 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   container: { flex: 1, paddingHorizontal: 20 },
-  body: { flexGrow: 1, gap: 18, paddingBottom: 16 },
+  header: { zIndex: 1 },
+  fade: { height: 36 },
+  fadeBottom: { height: 48 },
+  opaque: { flex: 1, backgroundColor: '#000' },
+  // La zona scorrevole sale sotto l'header: la dissolvenza avviene subito sotto il titolo.
+  underHeader: { marginTop: -16 },
+  body: { flexGrow: 1, gap: 18, paddingTop: 40, paddingBottom: 48 },
   hero: { alignItems: 'center', gap: 10, marginTop: 20, marginBottom: 6 },
   name: { fontSize: 26, fontWeight: '800', letterSpacing: -0.3, marginTop: 6 },
   statsRow: { flexDirection: 'row' },
   stat: { flex: 1, alignItems: 'center', gap: 2, paddingVertical: 16, paddingHorizontal: 8 },
   statValue: { fontSize: 20, fontWeight: '800', letterSpacing: -0.3 },
+  card: { paddingVertical: 12 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 24, paddingVertical: 14 },
   tile: { width: 36, height: 36, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   rowText: { flex: 1, gap: 2 },

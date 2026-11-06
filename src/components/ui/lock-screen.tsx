@@ -1,6 +1,6 @@
 import { Lock } from 'lucide-react-native';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, BackHandler, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AccountPicker } from '@/components/ui/account-picker';
@@ -11,6 +11,7 @@ import { useAppLock } from '@/context/app-lock';
 import { useAuth } from '@/context/auth';
 import { useFormErrors } from '@/hooks/use-form-errors';
 import { lockMessage, useLockCountdown } from '@/hooks/use-lock-countdown';
+import { useKeyboardCover } from '@/hooks/use-keyboard-cover';
 import { useTheme } from '@/hooks/use-theme';
 import { accountKey, listAccounts, type SavedAccount } from '@/services/accounts';
 import { MAX_RECOVERY_FAILURES, PIN_LENGTH } from '@/services/app-lock';
@@ -89,6 +90,7 @@ export function LockScreen() {
  * sono rimossi dal telefono (non dal cloud) e si riparte dal login.
  */
 function Recovery({ onCancel }: { onCancel: () => void }) {
+  const { ref, onLayout, paddingBottom } = useKeyboardCover();
   const t = useTheme();
   const { recover, disable } = useAppLock();
   const { signOut } = useAuth();
@@ -134,7 +136,7 @@ function Recovery({ onCancel }: { onCancel: () => void }) {
 
   return (
     <SafeAreaView style={styles.flex}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <View ref={ref} onLayout={onLayout} style={[styles.flex, { paddingBottom }]}>
         <ScrollView contentContainerStyle={styles.recoveryContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.top}>
             <Text style={[styles.title, { color: t.text }]}>Codice dimenticato</Text>
@@ -180,7 +182,7 @@ function Recovery({ onCancel }: { onCancel: () => void }) {
             <Text style={{ color: t.primary, fontSize: 15, fontWeight: '600' }}>Torna al codice</Text>
           </Pressable>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   );
 }

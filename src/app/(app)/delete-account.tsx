@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { TriangleAlert } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AccountPicker } from '@/components/ui/account-picker';
@@ -15,6 +15,7 @@ import { TextField } from '@/components/ui/text-field';
 import { Radius } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
 import { useFormErrors } from '@/hooks/use-form-errors';
+import { useKeyboardCover } from '@/hooks/use-keyboard-cover';
 import { useTheme } from '@/hooks/use-theme';
 import { accountKey, listAccounts, type SavedAccount } from '@/services/accounts';
 import { errorMessage } from '@/services/api';
@@ -33,6 +34,7 @@ export default function DeleteAccountScreen() {
   const [selected, setSelected] = useState<string | undefined>(user?.accountKey);
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  const { ref, onLayout, paddingBottom } = useKeyboardCover();
 
   useEffect(() => {
     listAccounts().then((l) => {
@@ -70,7 +72,7 @@ export default function DeleteAccountScreen() {
             </IconButton>
           }
         />
-        <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View ref={ref} onLayout={onLayout} style={[styles.flex, { paddingBottom }]}>
           <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <GlassPanel radius={Radius.lg} style={styles.warning}>
               <TriangleAlert size={28} color={t.danger} strokeWidth={2.2} />
@@ -114,7 +116,7 @@ export default function DeleteAccountScreen() {
               Per togliere l&apos;account solo da questo telefono, senza eliminarlo, usa il &quot;−&quot; nella lista account del profilo.
             </Text>
           </ScrollView>
-        </KeyboardAvoidingView>
+        </View>
       </SafeAreaView>
     </View>
   );

@@ -195,7 +195,7 @@ export async function register(input: { nome: string; cognome: string; email: st
   return { emailDaConfermare: res.emailDaConfermare };
 }
 
-/** Invia all'email del cliente il link per reimpostare la password (risponde ok anche se l'account non esiste). */
+/** Invia all'email del cliente il link per reimpostare la password (se l'account non esiste il server risponde con un errore). */
 export async function requestPasswordReset(email: string, codEsercente: string): Promise<void> {
   const esercente = await fetchEsercente(codEsercente);
   await cloudPost('/CLE/ResetPwdClienteApp', { CodEsercente: esercente.codEsercente, EMail: email.trim() });
@@ -207,7 +207,7 @@ export async function requestPasswordResetForAccount(key: string): Promise<void>
   await cloudPost('/CLE/ResetPwdClienteApp', { CodEsercente: acc.codEsercente, EMail: acc.email });
 }
 
-/** Reinvia l'email di conferma dell'account (risponde ok anche se l'account non esiste). */
+/** Reinvia l'email di conferma dell'account (se l'account non esiste il server risponde con un errore). */
 export async function resendConfirmation(email: string, codEsercente: string): Promise<void> {
   const esercente = await fetchEsercente(codEsercente);
   await cloudPost('/CLE/ReinoltraConfermaClienteApp', { CodEsercente: esercente.codEsercente, EMail: email.trim() });

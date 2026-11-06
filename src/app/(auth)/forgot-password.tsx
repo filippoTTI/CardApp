@@ -1,10 +1,11 @@
-import { Link, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text } from 'react-native';
 
-import { AuthScreen, KeyboardAnchor } from '@/components/ui/auth-screen';
+import { AuthScreen } from '@/components/ui/auth-screen';
 import { Button } from '@/components/ui/button';
 import { EsercenteCodeField } from '@/components/ui/esercente-code-field';
+import { SavedEsercenti } from '@/components/ui/saved-esercenti';
 import { TextField } from '@/components/ui/text-field';
 import { MISSING_CODE_MESSAGE, useEsercenteCode } from '@/hooks/use-esercente-code';
 import { useFormErrors } from '@/hooks/use-form-errors';
@@ -15,10 +16,11 @@ import { requestPasswordReset, resendConfirmation } from '@/services/auth';
 /** Recupero password o nuovo invio dell'email di conferma (`mode=conferma`); il codice esercente arriva dal login e non viene mostrato. */
 export default function ForgotPasswordScreen() {
   const t = useTheme();
+  const router = useRouter();
   const { cod, mode, email: emailParam } = useLocalSearchParams<{ cod?: string; mode?: string; email?: string }>();
   const conferma = mode === 'conferma';
   // come nel login: il campo codice compare solo se non c'è un link e non c'è nessun account salvato
-  const esercente = useEsercenteCode(cod, 'first-run');
+  const esercente = useEsercenteCode(cod, 'always');
   const { errors, fail, clear, shakeFor } = useFormErrors<'email'>();
   const [email, setEmail] = useState(emailParam ?? '');
   const [busy, setBusy] = useState(false);
@@ -38,19 +40,22 @@ export default function ForgotPasswordScreen() {
     }
   };
 
+  const pickCode = (c: string, n?: string) => {
+    esercente.setCode(c, n);
+    clear('email');
+  };
+
   return (
     <AuthScreen
+      onBack={() => (router.canGoBack() ? router.back() : router.replace({ pathname: '/login', params: cod ? { cod } : {} } as never))}
       title={conferma ? 'Conferma account' : 'Password dimenticata'}
-      subtitle={esercente.linkName ? `Account presso ${esercente.linkName}` : conferma ? "Reinvia l'email di conferma" : 'Ti inviamo un link per reimpostarla'}>
+      subtitle={esercente.linkName ? `Account presso ${esercente.linkName}` : conferma ? "Reinvia l'email di conferma" : 'Ti inviamo un link per reimpostarla'}
+      action={<Button title={sent ? 'Invia di nuovo' : 'Invia email'} onPress={onSend} loading={busy} disabled={!email.trim()} />}>
       {esercente.needsCode && (
-        <EsercenteCodeField
-          code={esercente.code}
-          name={esercente.name}
-          onChange={(c, n) => {
-            esercente.setCode(c, n);
-            clear('email');
-          }}
-        />
+        <>
+          <SavedEsercenti selected={esercente.code} onSelect={pickCode} />
+          <EsercenteCodeField code={esercente.code} name={esercente.name} onChange={pickCode} />
+        </>
       )}
       <TextField
         label="Email"
@@ -59,6 +64,8 @@ export default function ForgotPasswordScreen() {
         autoCapitalize="none"
         autoCorrect={false}
         autoComplete="email"
+        returnKeyType="send"
+        onSubmitEditing={() => email.trim() && onSend()}
         value={email}
         onChangeText={(v) => {
           setEmail(v);
@@ -72,18 +79,6 @@ export default function ForgotPasswordScreen() {
           {conferma ? "Se l'account esiste, riceverai un'email con il link di conferma." : "Se l'account esiste, riceverai un'email con il link per reimpostare la password."}
         </Text>
       )}
-      <KeyboardAnchor>
-        <Button title={sent ? 'Invia di nuovo' : 'Invia email'} onPress={onSend} loading={busy} disabled={!email.trim()} />
-      </KeyboardAnchor>
-      <View style={styles.footer}>
-        <Link href={{ pathname: '/login', params: cod ? { cod } : {} } as never} style={{ color: t.primary, fontWeight: '600' }}>
-          Torna al login
-        </Link>
-      </View>
     </AuthScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  footer: { flexDirection: 'row', justifyContent: 'center' },
-});

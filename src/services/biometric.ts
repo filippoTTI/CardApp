@@ -48,3 +48,20 @@ export async function authenticateBiometric(prompt = "Sblocca l'app"): Promise<b
     return false;
   }
 }
+
+/**
+ * Conferma l'identità del possessore prima di riaprire un account salvato (Face ID / impronta, con il codice del telefono
+ * come alternativa). Se il telefono non ha nessuna protezione o il modulo non c'è, non c'è nulla da chiedere: true.
+ * false solo se la verifica è annullata o fallita.
+ */
+export async function authenticateDevice(prompt = 'Accedi a CardApp'): Promise<boolean> {
+  const la = load();
+  if (!la) return true;
+  try {
+    if ((await la.getEnrolledLevelAsync()) === la.SecurityLevel.NONE) return true;
+    const res = await la.authenticateAsync({ promptMessage: prompt, cancelLabel: 'Annulla' });
+    return res.success;
+  } catch {
+    return false;
+  }
+}

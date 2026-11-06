@@ -56,7 +56,7 @@ export function AccountList() {
     ]);
 
   return (
-    <GlassPanel radius={Radius.lg}>
+    <GlassPanel radius={Radius.lg} style={styles.card}>
       {accounts.map((a, i) => {
         const key = accountKey(a);
         const active = key === user?.accountKey;
@@ -115,6 +115,7 @@ export function AccountList() {
 }
 
 const styles = StyleSheet.create({
+  card: { paddingVertical: 12 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 18, paddingHorizontal: 24, paddingVertical: 14 },
   text: { flex: 1, gap: 2 },
   pending: { flexDirection: 'row', alignItems: 'center', gap: 6 },

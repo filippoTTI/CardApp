@@ -30,6 +30,11 @@ export function errorMessage(e: unknown): string {
 /** Busta comune di tutte le risposte del cloud: `cod` 0 = ok, altrimenti `msg` spiega il problema. */
 export type Envelope = { cod: number; msg?: string };
 
+/** Messaggi tecnici del server (database, eccezioni .NET) che non vanno mostrati al cliente: diventano un avviso generico. */
+const TECHNICAL_MESSAGE = /unable to complete network request|error code \d+|firebird|sqlstate|violation of|exception|stack ?trace|object reference|\bat \w+\.\w+\(/i;
+
+const TECHNICAL_FALLBACK = 'Servizio temporaneamente non disponibile, riprova più tardi';
+
 async function request<T extends Envelope>(method: 'GET' | 'POST', path: string, body?: unknown, accessToken?: string): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -53,7 +58,11 @@ async function request<T extends Envelope>(method: 'GET' | 'POST', path: string,
       // risposta senza JSON valido (es. pagina di errore del server): il server c'è ma non risponde come previsto
       throw new ApiError(-1, res.status >= 500 ? 'Servizio non disponibile, riprova più tardi' : 'Risposta del server non valida', res.status);
     }
-    if (data.cod !== 0) throw new ApiError(data.cod, data.msg || 'Errore', res.status);
+    if (data.cod !== 0) {
+      // un guasto del server (database non raggiungibile, eccezione) non è un verdetto sulle credenziali: conta come errore temporaneo
+      if (data.msg && TECHNICAL_MESSAGE.test(data.msg)) throw new ApiError(-1, TECHNICAL_FALLBACK, res.status);
+      throw new ApiError(data.cod, data.msg || 'Errore', res.status);
+    }
     return data;
   } catch (e) {
     if (e instanceof ApiError) throw e;

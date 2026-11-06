@@ -11,6 +11,7 @@ export default function AppLayout() {
       <Stack.Screen name="profile" />
       <Stack.Screen name="card-details" />
       <Stack.Screen name="add-account" />
+      <Stack.Screen name="add-registration" />
       <Stack.Screen name="pin-setup" />
       <Stack.Screen name="delete-account" />
     </Stack>

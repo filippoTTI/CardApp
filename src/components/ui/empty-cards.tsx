@@ -54,13 +54,16 @@ export function EmptyCards() {
 
   return (
     <View style={styles.wrap}>
-      <Animated.View entering={FadeInDown.delay(150).duration(550)} style={[styles.illustration, float]}>
-        <MiniCard id="m1" top="#BFE5FA" bottom="#7CC3EE" rotate={-12} x={6} y={6} opacity={0.9} />
-        <MiniCard id="m2" top="#F4D788" bottom="#CF9B38" rotate={9} x={54} y={14} opacity={0.9} />
-        <MiniCard id="m3" top="#B5EBCF" bottom="#6FD09B" rotate={-2} x={26} y={34} />
-        <View style={[styles.dashed, { borderColor: t.textSecondary }]}>
-          <CreditCard size={34} color={t.textSecondary} strokeWidth={1.8} />
-        </View>
+      {/* l'ingresso e il galleggiamento (transform) stanno su due livelli: sullo stesso elemento la animazione di ingresso sovrascriverebbe il transform */}
+      <Animated.View entering={FadeInDown.delay(150).duration(550)}>
+        <Animated.View style={[styles.illustration, float]}>
+          <MiniCard id="m1" top="#BFE5FA" bottom="#7CC3EE" rotate={-12} x={6} y={6} opacity={0.9} />
+          <MiniCard id="m2" top="#F4D788" bottom="#CF9B38" rotate={9} x={54} y={14} opacity={0.9} />
+          <MiniCard id="m3" top="#B5EBCF" bottom="#6FD09B" rotate={-2} x={26} y={34} />
+          <View style={[styles.dashed, { borderColor: t.textSecondary }]}>
+            <CreditCard size={34} color={t.textSecondary} strokeWidth={1.8} />
+          </View>
+        </Animated.View>
       </Animated.View>
 
       <Animated.View entering={FadeInDown.delay(300).duration(550)} style={styles.texts}>

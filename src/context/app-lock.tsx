@@ -15,6 +15,22 @@ import {
 import { resetLocalAccounts, verifyAccountPassword } from '@/services/auth';
 import { authenticateBiometric, isBiometricAvailable, isBiometricPreferred, setBiometricPreferred } from '@/services/biometric';
 
+/** Operazioni in corso che mostrano un dialogo di sistema (es. permesso fotocamera): su Android mettono l'app in secondo piano. */
+let systemDialogs = 0;
+
+/** Esegue un'operazione che apre un dialogo di sistema senza che l'app venga coperta o conteggiata come "in secondo piano". */
+export async function withoutLock<T>(op: () => Promise<T>): Promise<T> {
+  systemDialogs += 1;
+  try {
+    return await op();
+  } finally {
+    // il cambio di stato dell'app può arrivare poco dopo la risposta del dialogo
+    setTimeout(() => {
+      systemDialogs -= 1;
+    }, 1000);
+  }
+}
+
 /** Dopo quanto tempo in secondo piano l'app torna a chiedere il codice. */
 const LOCK_AFTER_MS = 30 * 1000;
 
@@ -81,13 +97,14 @@ export function AppLockProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Tornando dal secondo piano dopo un po', l'app si riblocca. (I dialoghi di sistema mettono l'app solo in "inactive", non la bloccano.)
+  // Tornando dal secondo piano dopo un po', l'app si riblocca. (Su iOS i dialoghi di sistema mettono l'app solo in "inactive"; su Android quelli che aprono un'altra schermata passano da `withoutLock`.)
   // Appena l'app esce dal primo piano viene coperta: l'anteprima del multitasking non mostra card e QR, e al ritorno
   // non si vede il contenuto per un attimo prima della schermata del codice. Su iOS l'anteprima si scatta già in "inactive".
   useEffect(() => {
     if (!enabled) return;
     const coverOn = Platform.OS === 'ios' ? ['inactive', 'background'] : ['background'];
     const sub = AppState.addEventListener('change', (state) => {
+      if (systemDialogs > 0 && state !== 'active') return;
       if (state === 'active') {
         const at = backgroundAt.current;
         backgroundAt.current = null;

@@ -4,6 +4,7 @@ import { Linking, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/ui/button';
+import { withoutLock } from '@/context/app-lock';
 import { useTheme } from '@/hooks/use-theme';
 import { parseEsercenteCode } from '@/services/esercente-qr';
 import { optionalNative } from '@/services/optional-native';
@@ -87,7 +88,7 @@ function ScannerBody({ onClose, onCode }: { onClose: () => void; onCode: (code: 
             <Text style={[styles.title, { color: t.text }]}>Serve la fotocamera</Text>
             <Text style={[styles.message, { color: t.textSecondary }]}>Per leggere il QR dell&apos;esercente l&apos;app deve poter usare la fotocamera. L&apos;immagine non viene salvata né inviata.</Text>
             {permission.canAskAgain ? (
-              <Button title="Consenti la fotocamera" onPress={() => void requestPermission()} />
+              <Button title="Consenti la fotocamera" onPress={() => void withoutLock(requestPermission)} />
             ) : (
               <Button title="Apri le impostazioni" onPress={() => void Linking.openSettings()} />
             )}
