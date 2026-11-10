@@ -225,7 +225,7 @@ npm run lint
 Il progetto include `expo-dev-client`, quindi `expo start` apre per default il dev client. Per Expo Go serve `--go`. Alcuni moduli (Skia, glass effect, `@expo/ui`) potrebbero non essere inclusi in Expo Go: in quel caso usare il development build. I moduli camera, luminosita' e biometria sono caricati con `optionalNative`: se mancano nella build l'app non crasha ma la funzione risulta non disponibile.
 
 ### Test su dispositivo fisico con servizio locale
-Telefono e PC sulla stessa LAN, servizio in ascolto su `0.0.0.0`, porta aperta nel firewall di Windows, HTTP in chiaro consentito (Android dev client lo permette in debug).
+Telefono e PC sulla stessa LAN, servizio in ascolto su `0.0.0.0`, porta aperta nel firewall di Windows, HTTP in chiaro consentito (Android dev client lo permette in debug). Procedura completa passo passo (configurazione di wsClientiCloud e wsCard sui DB di test, avvio, verifica, problemi frequenti): [docs/SVILUPPO-LOCALE.md](docs/SVILUPPO-LOCALE.md).
 
 ### Build EAS (`eas.json`)
 - `development`: dev client, distribuzione interna.

@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Plus, UserRound } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { InteractionManager, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -36,8 +36,8 @@ export default function HomeScreen() {
   // Le card (SVG, ombre) sono la parte pesante: compaiono a transizione finita, una dopo l'altra, così l'ingresso resta fluido.
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(() => setReady(true));
-    return () => task.cancel();
+    const id = requestIdleCallback(() => setReady(true), { timeout: 500 });
+    return () => cancelIdleCallback(id);
   }, []);
 
   return (

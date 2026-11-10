@@ -4,13 +4,17 @@ App per i clienti degli esercenti: mostra le card fedeltà (saldo punti, contato
 
 ## Avvio
 
+> Attenzione se l'app e' gia' installata meglio disinstallarla in caso di Existing package com.cardapp.app signatures do not match
+
 ```bash
-npm install
-npx expo start          # serve un development build installato (non Expo Go)
-npx expo run:android    # compila e installa il development build
+npm ci                                  # cosi da non aggiornare i pacchetti ma tenere quelli che si trovano sul package-lock
+npx expo prebuild --platform android    # preparare la build per android
+npx expo start -c                       # serve un development build installato (non Expo Go)
+                                        # > se non funziona lo start prova con expo run:android
+npx expo run:android                    # compila e installa il development build
 ```
 
-`EXPO_PUBLIC_CLOUD_URL` in `.env.local` sostituisce l'indirizzo del servizio cloud clienti (es. un servizio locale di test).
+`EXPO_PUBLIC_CLOUD_URL` in `.env.local` sostituisce l'indirizzo del servizio cloud clienti (es. un servizio locale di test). Per far girare in locale tutta la catena (app + wsClientiCloud + wsCard sui DB di test) segui [docs/SVILUPPO-LOCALE.md](docs/SVILUPPO-LOCALE.md).
 
 ## Struttura
 
