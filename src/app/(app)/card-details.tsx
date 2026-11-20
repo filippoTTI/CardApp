@@ -8,30 +8,53 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { AnimatedBackground } from '@/components/ui/animated-background';
 import { CardMovements } from '@/components/ui/card-movements';
+import { CardThresholdsSection } from '@/components/ui/card-thresholds';
 import { FlipCard } from '@/components/ui/flip-card';
 import { GlassPanel } from '@/components/ui/glass-panel';
 import { IconButton } from '@/components/ui/icon-button';
 import { ScreenHeader } from '@/components/ui/screen-header';
-import { CARD_KIND_LABEL, euroFormat, formatDate, numberFormat } from '@/constants/format';
+import { CARD_KIND_LABEL, euroFormat, euroLabel, formatDate, formatDiscount, numberFormat } from '@/constants/format';
 import { Radius } from '@/constants/theme';
 import { useCards } from '@/context/cards';
 import { useTheme } from '@/hooks/use-theme';
 import { errorMessage } from '@/services/api';
-import type { Card, CardCounter } from '@/types/card';
+import { highestReachedThreshold, movementCounters, thresholdCounter } from '@/services/cards';
+import type { Card, CardCounter, CounterType } from '@/types/card';
 
-function formatCounter(c: CardCounter): { label: string; value: string } {
-  switch (c.type) {
-    case 'euro':
-      return { label: 'Saldo', value: euroFormat.format(c.amount) };
-    case 'points':
-      return { label: 'Punti', value: numberFormat.format(c.amount) };
-    case 'discount':
-      return { label: 'Sconto', value: `${numberFormat.format(c.amount)}%` };
-    case 'standard':
-      return { label: 'Card standard', value: 'Nessun saldo' };
-    default:
-      return { label: 'Contatore', value: numberFormat.format(c.amount) };
-  }
+/** Riga della sezione "Saldi e contatori": nome, a chi appartiene (esercente o circuito), valore ed eventuale soglia. */
+type CounterRow = { key: string; label: string; owner?: string; value: string; limit?: string };
+
+// ordine delle righe: prima il credito/saldo in euro, poi i punti, poi i tipi sconosciuti
+const COUNTER_ORDER: Partial<Record<CounterType, number>> = { euro: 0, points: 1, other: 2 };
+
+function counterRow(c: CardCounter, card: Card, i: number): CounterRow {
+  const euro = c.type === 'euro';
+  const format = (v: number) => (euro ? euroFormat.format(v) : numberFormat.format(v));
+  const label = euro ? euroLabel(card.kind) : c.type === 'points' ? 'Punti' : 'Contatore';
+  // sul contatore delle soglie premio la soglia è la più alta raggiunta finora (nessuna riga se non ce n'è):
+  // il limite del contatore (CardContDat.Limite) è solo la prima soglia copiata alla creazione della card e non si aggiorna
+  const soglia = c === thresholdCounter(card) ? highestReachedThreshold(card)?.amount : c.limit;
+  return {
+    key: `${c.type}-${c.name}-${i}`,
+    label,
+    owner: c.name || undefined,
+    value: format(c.amount),
+    limit: soglia ? `Soglia ${format(soglia)}` : undefined,
+  };
+}
+
+/**
+ * Righe dei contatori da mostrare: lo standard non ha saldo e il contatore sconto resta a 0, quindi non si mostrano;
+ * lo sconto si mostra con il valore del dettaglio della card. Il contatore dell'esercente emittente viene per primo.
+ */
+function counterRows(card: Card): CounterRow[] {
+  const rows = (card.counters ?? [])
+    .map((c, i) => ({ c, i }))
+    .filter(({ c }) => COUNTER_ORDER[c.type] !== undefined)
+    .sort((a, b) => COUNTER_ORDER[a.c.type]! - COUNTER_ORDER[b.c.type]! || Number(b.c.main) - Number(a.c.main) || a.i - b.i)
+    .map(({ c, i }) => counterRow(c, card, i));
+  if (card.discount) rows.push({ key: 'sconto', label: 'Sconto', owner: card.issuer?.name, value: formatDiscount(card.discount) });
+  return rows;
 }
 
 type Row = { label: string; value: string };
@@ -59,6 +82,7 @@ export default function CardDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { cards, setBlocked, reload } = useCards();
   const card = cards.find((c) => c.id === id);
+  const counters = card ? counterRows(card) : [];
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -121,41 +145,40 @@ export default function CardDetailsScreen() {
               <FlipCard card={card} />
             </Animated.View>
 
-            {card.counters && card.counters.length > 0 && (
+            {counters.length > 0 && (
               <Animated.View entering={FadeInDown.delay(180).duration(450)}>
                 <Text style={[styles.section, { color: t.textSecondary }]}>Saldi e contatori</Text>
                 <GlassPanel radius={Radius.lg}>
-                  {card.counters.map((c, i) => {
-                    const f = formatCounter(c);
-                    return (
-                      <View key={`${c.type}-${c.name}-${i}`}>
-                        <View style={styles.row}>
-                          <View style={styles.rowText}>
-                            <Text style={{ color: t.text, fontSize: 16, fontWeight: '600' }} numberOfLines={1}>
-                              {f.label}
+                  {counters.map((r, i) => (
+                    <View key={r.key}>
+                      <View style={styles.row}>
+                        <View style={styles.rowText}>
+                          <Text style={{ color: t.text, fontSize: 16, fontWeight: '600' }} numberOfLines={1}>
+                            {r.label}
+                          </Text>
+                          {r.owner ? (
+                            <Text style={{ color: t.textSecondary, fontSize: 13 }} numberOfLines={1}>
+                              {r.owner}
                             </Text>
-                            {c.name ? (
-                              <Text style={{ color: t.textSecondary, fontSize: 13 }} numberOfLines={1}>
-                                {c.name}
-                              </Text>
-                            ) : null}
-                          </View>
-                          <View style={styles.rowValue}>
-                            <Text style={{ color: t.text, fontSize: 16, fontWeight: '700' }} numberOfLines={1}>
-                              {f.value}
-                            </Text>
-                            {c.limit !== undefined && c.limit !== 0 ? (
-                              <Text style={{ color: t.textSecondary, fontSize: 12 }}>
-                                Limite {c.type === 'euro' ? euroFormat.format(c.limit) : numberFormat.format(c.limit)}
-                              </Text>
-                            ) : null}
-                          </View>
+                          ) : null}
                         </View>
-                        {i < card.counters!.length - 1 && <View style={[styles.separator, { backgroundColor: t.border }]} />}
+                        <View style={styles.rowValue}>
+                          <Text style={{ color: t.text, fontSize: 16, fontWeight: '700' }} numberOfLines={1}>
+                            {r.value}
+                          </Text>
+                          {r.limit ? <Text style={{ color: t.textSecondary, fontSize: 12 }}>{r.limit}</Text> : null}
+                        </View>
                       </View>
-                    );
-                  })}
+                      {i < counters.length - 1 && <View style={[styles.separator, { backgroundColor: t.border }]} />}
+                    </View>
+                  ))}
                 </GlassPanel>
+              </Animated.View>
+            )}
+
+            {card.thresholds && (
+              <Animated.View entering={FadeInDown.delay(230).duration(450)}>
+                <CardThresholdsSection card={card} />
               </Animated.View>
             )}
 
@@ -177,7 +200,7 @@ export default function CardDetailsScreen() {
               </GlassPanel>
             </Animated.View>
             <Animated.View entering={FadeInDown.delay(380).duration(450)}>
-              <CardMovements accountKey={card.accountKey ?? ''} cardId={card.id} refreshKey={refreshKey} />
+              <CardMovements accountKey={card.accountKey ?? ''} cardId={card.id} counters={movementCounters(card)} refreshKey={refreshKey} />
             </Animated.View>
             <Animated.View entering={FadeInDown.delay(480).duration(450)}>
               <Pressable

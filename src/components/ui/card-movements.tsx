@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 
 import { GlassPanel } from '@/components/ui/glass-panel';
+import { SegmentedControl } from '@/components/ui/segmented-control';
 import SkeletonLoading from '@/components/ui/skeleton-loading';
 import { euroFormat, formatDateTime, numberFormat } from '@/constants/format';
 import { Radius } from '@/constants/theme';
@@ -12,7 +13,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
 import { errorMessage } from '@/services/api';
 import { fetchMovements } from '@/services/cards';
-import type { CardMovement, CounterType } from '@/types/card';
+import type { CardMovement, CounterType, MovementCounter } from '@/types/card';
 
 const KIND_STYLE: Record<CardMovement['kind'], { Icon: LucideIcon; tile: string; label: string }> = {
   recharge: { Icon: Plus, tile: '#22C55E', label: 'Ricarica' },
@@ -20,7 +21,7 @@ const KIND_STYLE: Record<CardMovement['kind'], { Icon: LucideIcon; tile: string;
   credit: { Icon: Star, tile: '#F59E0B', label: 'Accredito' },
 };
 
-/** Importo con il simbolo del contatore (euro, punti, percentuale di sconto). */
+/** Importo con il simbolo del contatore (euro o punti). */
 function formatAmount(value: number, counter: CounterType, signed: boolean): string {
   const sign = signed && value > 0 ? '+' : '';
   switch (counter) {
@@ -28,17 +29,19 @@ function formatAmount(value: number, counter: CounterType, signed: boolean): str
       return `${sign}${euroFormat.format(value)}`;
     case 'points':
       return `${sign}${numberFormat.format(value)} punti`;
-    case 'discount':
-      return `${sign}${numberFormat.format(value)}%`;
     default:
       return `${sign}${numberFormat.format(value)}`;
   }
 }
 
+// lo standard non ha saldo e il contatore sconto resta a 0: per questi movimenti conta lo scontrino, non il contatore
+const NO_BALANCE: CounterType[] = ['standard', 'discount'];
+
 function MovementRow({ movement, last }: { movement: CardMovement; last: boolean }) {
   const t = useTheme();
   const [open, setOpen] = useState(false);
   const { Icon, tile, label } = KIND_STYLE[movement.kind];
+  const noBalance = NO_BALANCE.includes(movement.counter);
   const expandable = movement.lines.length > 0 || !!movement.document || !!movement.circuit || !!movement.slaveCode;
 
   return (
@@ -55,14 +58,27 @@ function MovementRow({ movement, last }: { movement: CardMovement; last: boolean
             {`${formatDateTime(movement.dateTime)} · ${movement.merchant}`}
           </Text>
         </View>
-        <View style={styles.rowValue}>
-          <Text style={{ color: movement.amount > 0 ? '#22C55E' : t.text, fontSize: 16, fontWeight: '700' }} numberOfLines={1}>
-            {formatAmount(movement.amount, movement.counter, true)}
-          </Text>
-          <Text style={{ color: t.textSecondary, fontSize: 12 }} numberOfLines={1}>
-            {`Saldo ${formatAmount(movement.balanceAfter, movement.counter, false)}`}
-          </Text>
-        </View>
+        {noBalance ? (
+          movement.documentTotal ? (
+            <View style={styles.rowValue}>
+              <Text style={{ color: t.text, fontSize: 16, fontWeight: '700' }} numberOfLines={1}>
+                {euroFormat.format(movement.documentTotal)}
+              </Text>
+              <Text style={{ color: t.textSecondary, fontSize: 12 }} numberOfLines={1}>
+                Scontrino
+              </Text>
+            </View>
+          ) : null
+        ) : (
+          <View style={styles.rowValue}>
+            <Text style={{ color: movement.amount > 0 ? '#22C55E' : t.text, fontSize: 16, fontWeight: '700' }} numberOfLines={1}>
+              {formatAmount(movement.amount, movement.counter, true)}
+            </Text>
+            <Text style={{ color: t.textSecondary, fontSize: 12 }} numberOfLines={1}>
+              {`Saldo ${formatAmount(movement.balanceAfter, movement.counter, false)}`}
+            </Text>
+          </View>
+        )}
       </Pressable>
 
       {open && (
@@ -109,12 +125,63 @@ function SkeletonRow({ last }: { last: boolean }) {
   );
 }
 
+const COUNTER_LABEL: Record<MovementCounter, string> = { euro: 'Euro', points: 'Raccolta punti' };
+
 /**
- * Elenco dei movimenti di una card (ricariche, spese, accrediti), dal più recente, con paginazione.
- * Al primo caricamento mostra righe segnaposto; gli aggiornamenti (`refreshKey`) avvengono senza svuotare l'elenco,
- * che viene sostituito solo quando arrivano i dati nuovi. Le risposte arrivate fuori tempo vengono ignorate.
+ * Sezione "Movimenti" di una card. `counters` (da `movementCounters`) dice quali movimenti mostrare: con euro e punti
+ * un selettore sotto il titolo sceglie quali vedere (ogni elenco, una volta aperto, resta caricato); con uno solo si
+ * vedono quelli; senza nessuno tutti i movimenti (gli scontrini delle card standard).
  */
-export function CardMovements({ accountKey, cardId, refreshKey = 0 }: { accountKey: string; cardId: string; refreshKey?: number }) {
+export function CardMovements({
+  accountKey,
+  cardId,
+  counters,
+  refreshKey = 0,
+}: {
+  accountKey: string;
+  cardId: string;
+  counters: MovementCounter[];
+  refreshKey?: number;
+}) {
+  const t = useTheme();
+  const [selected, setSelected] = useState<MovementCounter | undefined>(counters[0]);
+  // la voce scelta deve esistere ancora (i contatori della card possono cambiare con un aggiornamento)
+  const active = selected && counters.includes(selected) ? selected : counters[0];
+  const [opened, setOpened] = useState<MovementCounter[]>([]);
+  const kept = opened.filter((c) => counters.includes(c));
+  const shown = active && !kept.includes(active) ? [...kept, active] : kept;
+
+  const choose = (c: MovementCounter) => {
+    setOpened(shown.includes(c) ? shown : [...shown, c]);
+    setSelected(c);
+  };
+
+  return (
+    <View>
+      <Text style={[styles.section, { color: t.textSecondary }]}>Movimenti</Text>
+      {counters.length > 1 && active && (
+        <SegmentedControl options={counters.map((c) => ({ value: c, label: COUNTER_LABEL[c] }))} value={active} onChange={choose} />
+      )}
+      {active ? (
+        shown.map((c) => (
+          <View key={c} style={c === active ? undefined : styles.hidden}>
+            <MovementList accountKey={accountKey} cardId={cardId} counter={c} refreshKey={refreshKey} />
+          </View>
+        ))
+      ) : (
+        <MovementList accountKey={accountKey} cardId={cardId} refreshKey={refreshKey} />
+      )}
+    </View>
+  );
+}
+
+/**
+ * Elenco dei movimenti di una card (ricariche, spese, accrediti), dal più recente, con paginazione; con `counter`
+ * solo quelli di quel contatore. Al primo caricamento mostra righe segnaposto; gli aggiornamenti (`refreshKey`)
+ * avvengono senza svuotare l'elenco, che viene sostituito solo quando arrivano i dati nuovi. Le risposte arrivate
+ * fuori tempo vengono ignorate.
+ */
+function MovementList({ accountKey, cardId, counter, refreshKey }: { accountKey: string; cardId: string; counter?: MovementCounter; refreshKey: number }) {
   const t = useTheme();
   const [items, setItems] = useState<CardMovement[]>([]);
   const [total, setTotal] = useState(0);
@@ -130,7 +197,7 @@ export function CardMovements({ accountKey, cardId, refreshKey = 0 }: { accountK
   // prima pagina all'apertura e a ogni aggiornamento
   useEffect(() => {
     const id = ++request.current;
-    fetchMovements(accountKey, cardId, 1)
+    fetchMovements(accountKey, cardId, 1, counter)
       .then((res) => {
         if (id !== request.current) return;
         setItems(res.movements);
@@ -146,7 +213,7 @@ export function CardMovements({ accountKey, cardId, refreshKey = 0 }: { accountK
         setInitialLoading(false);
         setLoadingMore(false);
       });
-  }, [accountKey, cardId, refreshKey, retryKey]);
+  }, [accountKey, cardId, counter, refreshKey, retryKey]);
 
   // all'uscita dalla schermata le risposte in arrivo non devono più aggiornare nulla
   useEffect(
@@ -161,7 +228,7 @@ export function CardMovements({ accountKey, cardId, refreshKey = 0 }: { accountK
     const id = ++request.current;
     setLoadingMore(true);
     try {
-      const res = await fetchMovements(accountKey, cardId, page + 1);
+      const res = await fetchMovements(accountKey, cardId, page + 1, counter);
       if (id !== request.current) return;
       // un movimento già mostrato (es. arrivato un nuovo movimento che ha fatto scorrere le pagine) non si duplica
       setItems((prev) => [...prev, ...res.movements.filter((m) => !prev.some((p) => p.id === m.id))]);
@@ -189,9 +256,7 @@ export function CardMovements({ accountKey, cardId, refreshKey = 0 }: { accountK
   const hasMore = items.length > 0 && items.length < total;
 
   return (
-    <View>
-      <Text style={[styles.section, { color: t.textSecondary }]}>Movimenti</Text>
-      <GlassPanel radius={Radius.lg}>
+    <GlassPanel radius={Radius.lg}>
         {initialLoading ? (
           <SkeletonShimmerProvider>
             {Array.from({ length: SKELETON_ROWS }, (_, i) => (
@@ -238,8 +303,7 @@ export function CardMovements({ accountKey, cardId, refreshKey = 0 }: { accountK
             )}
           </Animated.View>
         )}
-      </GlassPanel>
-    </View>
+    </GlassPanel>
   );
 }
 
@@ -257,4 +321,5 @@ const styles = StyleSheet.create({
   errorText: { textAlign: 'center', fontSize: 14 },
   skeletonGap: { marginTop: 6 },
   more: { alignItems: 'center', justifyContent: 'center', height: 58 },
+  hidden: { display: 'none' },
 });

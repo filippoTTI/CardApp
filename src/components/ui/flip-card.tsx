@@ -14,7 +14,7 @@ import Svg, { ClipPath, Defs, Ellipse, G, LinearGradient, Path, Stop } from 'rea
 
 import { QrCode } from '@/components/ui/qr-code';
 import { boostBrightness, restoreBrightness } from '@/services/brightness';
-import { CARD_KIND_LABEL, euroFormat, numberFormat } from '@/constants/format';
+import { CARD_KIND_LABEL, euroFormat, euroLabel, numberFormat } from '@/constants/format';
 import { useBackgroundFocus } from '@/context/background-focus';
 import { useParallax } from '@/context/parallax';
 import { paletteFromColor } from '@/constants/card-color';
@@ -83,8 +83,8 @@ type Palette = {
   shadow: string;
 };
 /**
- * Colori per tipo di card, ognuno con variante chiara e scura. Prepagata = azzurro, postpagata = viola-orchidea, standard = verde, gift = oro:
- * entrambi stanno bene con il verde dello sfondo e restano distinti tra loro.
+ * Colori per tipo di card, ognuno con variante chiara e scura. Prepagata = azzurro, postpagata = viola-orchidea, standard = verde:
+ * stanno bene con il verde dello sfondo e restano distinti tra loro.
  */
 const PALETTES: Record<CardKind, Record<'light' | 'dark', Palette>> = {
   prepaid: {
@@ -153,28 +153,6 @@ const PALETTES: Record<CardKind, Record<'light' | 'dark', Palette>> = {
       shadow: '#000000',
     },
   },
-  gift: {
-    light: {
-      bgTop: '#F4D788',
-      bgBottom: '#CF9B38',
-      line: 'rgba(90,55,5,0.07)',
-      text: '#3F2603',
-      textSoft: 'rgba(63,38,3,0.68)',
-      qrBox: '#FFFFFF',
-      edge: 'rgba(255,248,220,0.75)',
-      shadow: '#052414',
-    },
-    dark: {
-      bgTop: '#8F7215',
-      bgBottom: '#4F3E09',
-      line: 'rgba(255,232,140,0.07)',
-      text: '#FFF3C4',
-      textSoft: 'rgba(255,243,196,0.68)',
-      qrBox: '#FFFFFF',
-      edge: 'rgba(255,226,120,0.30)',
-      shadow: '#000000',
-    },
-  },
 };
 
 /** Sfondo vettoriale della card: ombra (copie sfalsate della sagoma), colore, curve di livello, piega centrale, bordo (rosso se `alertColor`). */
@@ -232,9 +210,10 @@ function useFaceStyle(offset: number, flip: SharedValue<number>, press: SharedVa
   }));
 }
 
-function formatBalance(balance: CardBalance): { value: string; unit: string } {
+/** Saldo in basso a destra: euro con l'etichetta del tipo di card (credito o saldo), altrimenti punti. */
+function formatBalance(balance: CardBalance, kind: CardKind): { value: string; unit: string } {
   if (balance.type === 'euro') {
-    return { value: euroFormat.format(balance.amount), unit: 'Saldo' };
+    return { value: euroFormat.format(balance.amount), unit: euroLabel(kind) };
   }
   return { value: numberFormat.format(balance.amount), unit: 'Punti' };
 }
@@ -319,7 +298,7 @@ export function FlipCard({ card, onOpenDetails }: { card: Card; onOpenDetails?: 
 
   const frontStyle = useFaceStyle(0, flip, press);
   const backStyle = useFaceStyle(180, flip, press);
-  const formatted = card.balance ? formatBalance(card.balance) : null;
+  const formatted = card.balance ? formatBalance(card.balance, card.kind) : null;
   const alertColor = card.blocked ? theme.danger : undefined;
   const k = width / W; // scala tipografia in base alla larghezza reale
 

@@ -1,6 +1,6 @@
 # CardApp - Documentazione completa
 
-CardApp e' l'app per i clienti degli esercenti: mostra le card fedelta' (saldo punti, contatori, movimenti) di uno o piu' account e genera il QR da esibire in cassa. Ogni account e' legato a un esercente.
+CardApp e' l'app per i clienti degli esercenti: mostra le card fedelta', prepagate e postpagate (credito o punti, sconto, contatori, movimenti) di uno o piu' account e genera il QR da esibire in cassa. Ogni account e' legato a un esercente.
 
 Il documento e' diviso in due parti:
 
@@ -19,10 +19,10 @@ Il documento e' diviso in due parti:
 | Codice esercente | Codice alfanumerico (4-32 caratteri) che identifica l'esercente; si ottiene da QR o link, oppure si digita |
 | Account | Coppia email + esercente. Lo stesso cliente puo' avere piu' account (esercenti diversi o email diverse) |
 | Card | Tessera assegnata al cliente dall'esercente, con codice di 6 caratteri e uno o piu' contatori |
-| Contatore | Saldo associato alla card (oggi l'app gestisce i punti) |
+| Contatore | Valore associato alla card, per card, esercente o circuito. Tipi del gestionale: 0 standard (nessun saldo, non mostrato), 1 euro, 4 punti, 5 sconto (resta a 0: il valore dello sconto sta nel dettaglio della card) |
 | Codice di sblocco | PIN di 4 cifre che protegge l'apertura dell'app |
 
-Tipi di card mostrati: Standard (fedelta'), Prepagata, Postpagata, Gift card. Ogni tipo ha un colore predefinito; se l'esercente ha scelto un colore per la card, vale quello.
+Tipi di card mostrati: Standard (fedelta', anche con autoricarica), Prepagata, Postpagata. Ogni tipo ha un colore predefinito; se l'esercente ha scelto un colore per la card, vale quello.
 
 ## A2. Primo avvio e accesso
 
@@ -81,7 +81,7 @@ La home mostra le card di tutti gli account salvati, raggruppate per account (es
 - In alto a sinistra l'icona profilo, in alto a destra "+" per aggiungere un account.
 
 ### La card
-- Fronte: nome dell'esercente, tipo, saldo (punti) e codice. Un pulsante sulla card apre i dettagli.
+- Fronte: nome dell'esercente, tipo, saldo e codice. Il saldo e' il contatore euro se la card ce l'ha ("Credito", o "Saldo" sulla postpagata), altrimenti i punti ("Punti"); una card con il solo contatore standard non mostra saldo. Un pulsante sulla card apre i dettagli.
 - Toccando la card si gira e mostra il QR del codice card, da far leggere in cassa. Alla comparsa del QR la luminosita' dello schermo sale al massimo (con transizione graduale) e viene ripristinata quando la card si richiude.
 - Una card bloccata mostra la scritta BLOCCATA, ha il bordo rosso e non si gira: il QR non e' disponibile.
 - Le card si inclinano leggermente con il movimento del telefono (effetto parallasse con lo sfondo).
@@ -90,9 +90,10 @@ La home mostra le card di tutti gli account salvati, raggruppate per account (es
 
 Aprendo i dettagli:
 
-- **Saldi e contatori**: un riquadro per ogni contatore. Il tipo determina etichetta e formato: Saldo (euro), Punti, Sconto (percentuale), Card standard ("Nessun saldo"), Contatore (altro). Viene indicato l'esercente o il circuito a cui appartiene il contatore e l'eventuale limite.
+- **Saldi e contatori**: prima i contatori euro ("Credito", o "Saldo" sulla postpagata), poi i punti, il contatore dell'esercente emittente per primo; sotto l'etichetta l'esercente o il circuito, a destra valore ed eventuale soglia. I contatori standard e sconto non si mostrano; se la card fa uno sconto c'e' una riga "Sconto" con il valore del dettaglio (percentuale, euro o "Su tipologie di prodotti"). Un tipo sconosciuto compare come "Contatore". Senza righe la sezione non c'e'.
+- **Soglie premio** (solo se la card ne ha): per ogni soglia, dalla piu' bassa, il buono (o "Premio"), il valore da raggiungere in punti o in euro, una barra di avanzamento con il saldo del contatore dello stesso tipo e, se non e' ancora raggiunta, "Ti mancano X" (una soglia raggiunta ha l'icona QR e la barra piena, senza nota). Sulla postpagata conta il valore assoluto del saldo euro. Se la card non ha il contatore di quel tipo le soglie si vedono senza barra. Toccando una soglia si apre (una alla volta) con il testo completo del buono e i dettagli: premio, soglia, punti o saldo attuali, stato e come riscattarlo. Ogni soglia raggiunta ha il **proprio QR del premio** da mostrare in cassa, con contenuto `<codice card>-<valore soglia>` (es. `DSEOZVPTC5-4`; niente `:`, che la fotocamera dell'iPhone non legge; generato da `buildThresholdQrPayload` in `services/qr.ts`): toccando l'icona QR la soglia si apre direttamente sul QR; dal dettaglio aperto si passa al QR scorrendo verso sinistra o toccando i dettagli (due puntini indicano la pagina, scorrendo a destra si torna ai dettagli). Mentre il QR del premio e' visibile la luminosita' va al massimo e lo sfondo si sfuma, come per la card girata. Su una card bloccata le soglie raggiunte non hanno QR (icona regalo e messaggio "sbloccala per riscattare il premio"). Sotto il valore del contatore delle soglie (in "Saldi e contatori") la riga "Soglia N" mostra la soglia piu' alta raggiunta finora (nessuna riga se non ne e' raggiunta nessuna); il limite del contatore (`CardContDat.Limite`, prima soglia copiata alla creazione) si usa solo per le card senza soglie premio.
 - **Informazioni**: codice, tipo, stato (Attiva/Bloccata), emessa da (con citta'), riferimento, note, card master, data di inserimento, ultimo utilizzo. Compaiono solo le righe valorizzate.
-- **Movimenti**: elenco dal piu' recente a pagine da 20; "mostra altri" carica la pagina successiva. Tipi: Ricarica, Spesa, Accredito. Per ogni movimento: data/ora, importo con segno, saldo dopo, descrizione, documento, esercente, circuito, e le righe di dettaglio (descrizione, quantita', totale). Al primo caricamento compaiono righe segnaposto.
+- **Movimenti**: si vedono i movimenti del contatore euro e/o di quello a punti della card. Se la card li ha entrambi, sotto il titolo un selettore "Euro" / "Raccolta punti" sceglie quali vedere (ogni elenco, una volta aperto, resta caricato); con uno solo si vedono quelli senza selettore; una card senza euro ne' punti mostra tutti i movimenti (gli scontrini). Elenco dal piu' recente a pagine da 20; "mostra altri" carica la pagina successiva. Tipi: Ricarica, Spesa, Accredito. Per ogni movimento: data/ora, importo con segno e saldo dopo (euro o punti; per i movimenti dei contatori standard e sconto invece il totale dello scontrino, se c'e'), descrizione, documento, esercente, circuito, e le righe di dettaglio (descrizione, quantita', totale). Al primo caricamento compaiono righe segnaposto.
 - **Blocca card / Sblocca card**: il blocco chiede conferma ("La card non potra' essere usata finche' non la sblocchi"), lo sblocco e' immediato. Se la card era gia' nello stato richiesto, un avviso lo comunica.
 - Tirando verso il basso si aggiornano card e movimenti.
 
@@ -100,7 +101,7 @@ Aprendo i dettagli:
 
 Mostra i dati dell'account in uso:
 - Avatar con iniziali, nome e cognome.
-- Riepilogo: numero di card, card attive, punti totali (somma dei saldi punti). Finche' le card non sono arrivate i valori sono "-".
+- Riepilogo: numero di card, card attive, punti totali (somma, per ogni card, del contatore punti dell'esercente emittente o del primo contatore punti). Finche' le card non sono arrivate i valori sono "-".
 - Esercente, email, telefono (se presente).
 - **Lista account**: tocco su una riga per passare a quell'account; chiave per il recupero password; "-" rosso per toglierlo dal telefono.
 - **Proteggi app**: interruttore per attivare/disattivare il codice di sblocco.
@@ -347,18 +348,21 @@ Altri context: `parallax` (inclinazione del telefono), `background-focus`, `skel
 | POST | `/CLE/ResetPwdClienteApp` | link reimpostazione password |
 | POST | `/CLE/ReinoltraConfermaClienteApp` | reinvio email di conferma |
 | POST (auth) | `/AUC/CardCliente` | elenco card |
-| POST (auth) | `/AUC/MovimentiCardCliente` | body `{idCard, pagina, dimensione}`, pagine da 20 |
+| POST (auth) | `/AUC/MovimentiCardCliente` | body `{idCard, pagina, dimensione, tipoContatore?}` (1 euro, 4 punti; assente = tutti), pagine da 20 |
 | POST (auth) | `/AUC/BloccaCardCliente` | body `{idCard, blocca}` -> `{bloccata, modificata}` |
 | POST (auth) | `/AUC/EliminaAccountCliente` | body `{pwd}` |
 
 Tutte le risposte hanno la busta `{cod, msg}`. Il token cliente scade dopo 5 minuti.
 
 ### Mappatura card (`services/cards.ts`)
-- `tipo` del gestionale (`CARDDETTAGLIO`): `Standard`, `PrePagata`, `PostPagata`, `GiftCard` -> `standard | prepaid | postpaid | gift`; qualsiasi altro valore o assenza di dettaglio = standard.
-- Contatori: `tipoContatore === 0` = punti, altrimenti `other`. `tipoAssociazione`: 0 card, 1 esercente, 2 circuito.
-- Saldo mostrato sulla card: i punti del contatore `principale` (esercente emittente), altrimenti il primo contatore a punti.
+- `tipo` del gestionale (`CARDDETTAGLIO`): `Standard`, `PrePagata`, `PostPagata` -> `standard | prepaid | postpaid`; qualsiasi altro valore o assenza di dettaglio = standard.
+- Contatori (`TIPI_CONTATORE`): `tipoContatore` 0 `standard`, 1 `euro`, 4 `points`, 5 `discount`, altrimenti `other`; `principale` -> `main`. `tipoAssociazione`: 0 card, 1 esercente, 2 circuito.
+- Saldo mostrato sulla card (`pickBalance`): il contatore euro, altrimenti quello a punti; per ognuno il `principale` (esercente emittente), altrimenti il primo (`pickCounter`). Lo standard non e' mai un saldo.
+- Sconto: `tipoSconto` (`Percentuale | Valore | Tipologia`) e `sconto` della card -> `discount` (`percent | value | category`); assente se non attivo.
+- Soglie premio: `soglieIn` (`Punti | Euro`) e `soglie` (`{soglia, buono}`) -> `thresholds` (`{type: points | euro, items: {amount, reward}}`), assenti senza soglie valide. `contatoreLimite` resta `limit` e si mostra come "Soglia".
+- Movimenti da mostrare (`movementCounters(card)`): `euro` e/o `points` secondo i contatori della card; elenco vuoto = nessun filtro.
 - Date: `dataInserimento` `yyyyMMdd`, `ultimoUtilizzo` `yyyyMMddHHmmss` (si tengono i primi 8 caratteri); movimenti `yyyy-MM-ddTHH:mm:ss`.
-- Movimenti: `ricarica | spesa | accredito` -> `recharge | expense | credit`. I nomi dei contatori `standard | euro | punti | sconto` sono mappati su `CounterType`.
+- Movimenti: `ricarica | spesa | accredito` -> `recharge | expense | credit`. I nomi dei contatori `standard | euro | punti | sconto` sono mappati su `CounterType`; `totaleDocumento` -> `documentTotal`.
 - Se l'emittente non e' valorizzato si usa la ragione sociale dell'account.
 
 ### QR della card
@@ -368,14 +372,16 @@ Tutte le risposte hanno la busta `{cod, msg}`. Il token cliente scade dopo 5 min
 Con almeno un QR visibile la luminosita' sale a 1 con rampa di 450 ms (passi da 30 ms, ease-out) e torna al valore originale alla chiusura dell'ultimo QR. Il valore originale viene dimenticato solo a discesa finita. Modulo `expo-brightness` opzionale.
 
 ### Colori card (`constants/card-color.ts`, `components/ui/flip-card.tsx`)
-Il colore scelto dall'esercente (`CARDDETTAGLIO.Colore`, es. `#1f4634`, formato `#RGB` o `#RRGGBB`) ha la precedenza e genera una palette (`CardPalette`) per sfondo, curve, testi, riquadro QR, bordo, ombra. Se non valido vale la palette del tipo (prepagata azzurro, postpagata viola-orchidea, standard verde, gift oro, con varianti chiara/scura). La card e' disegnata in SVG su un viewBox 340x214; il flip e' una rotazione Y con prospettiva.
+Il colore scelto dall'esercente (`CARDDETTAGLIO.Colore`, es. `#1f4634`, formato `#RGB` o `#RRGGBB`) ha la precedenza e genera una palette (`CardPalette`) per sfondo, curve, testi, riquadro QR, bordo, ombra. Se non valido vale la palette del tipo (prepagata azzurro, postpagata viola-orchidea, standard verde, con varianti chiara/scura). La card e' disegnata in SVG su un viewBox 340x214; il flip e' una rotazione Y con prospettiva.
 
 ## B9. Componenti principali (`src/components/ui`)
 
 | Componente | Ruolo |
 |---|---|
 | `flip-card` | Card vettoriale con flip fronte/QR, stato bloccata, parallasse |
-| `card-movements` | Elenco movimenti paginato, risposte fuori tempo ignorate, segnaposto al primo carico |
+| `card-movements` | Elenco movimenti paginato, risposte fuori tempo ignorate, segnaposto al primo carico; selettore Euro / Raccolta punti |
+| `card-thresholds` | Sezione "Soglie premio" con avanzamento e QR dei premi raggiunti |
+| `segmented-control` | Selettore a segmenti con indicatore animato |
 | `cards-skeleton`, `skeleton-loading` | Segnaposto di caricamento |
 | `empty-cards` | Stato vuoto animato (si ferma quando la home non e' in primo piano o e' bloccata) |
 | `account-list` | Lista account del profilo (cambio, recupero password, rimozione) |
@@ -437,6 +443,6 @@ Log: gli errori dei moduli opzionali (`[brightness]`, `[camera]`, `[biometric]`)
 
 - Le cartelle native sono generate: non modificarle a mano.
 - Il formato del QR card e' centralizzato in `services/qr.ts`; il formato del QR esercente in `services/esercente-qr.ts`.
-- Nuovi tipi di contatore (oggi solo punti) vanno aggiunti in `services/cards.ts` (`counterType`, `COUNTER_TYPES`) e in `formatCounter` di `card-details.tsx`.
+- Nuovi tipi di contatore vanno aggiunti in `services/cards.ts` (`TIPI_CONTATORE`, `COUNTER_TYPES`) e in `counterRows`/`COUNTER_ORDER` di `card-details.tsx`.
 - Nuovi tipi di card: `CardKind` in `types/card.ts`, `KINDS` in `services/cards.ts`, `CARD_KIND_LABEL` in `constants/format.ts`, palette in `flip-card`.
 - Il percorso `(app)/recupera-password.tsx` riesporta `forgot-password`, cosi' la stessa schermata e' raggiungibile anche da loggati.

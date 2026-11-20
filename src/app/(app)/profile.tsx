@@ -23,6 +23,7 @@ import { useCards } from '@/context/cards';
 import { useTheme } from '@/hooks/use-theme';
 import { PIN_LENGTH } from '@/services/app-lock';
 import type { AuthCliente } from '@/services/auth';
+import { pickCounter } from '@/services/cards';
 import type { Card } from '@/types/card';
 
 type InfoRow = { Icon: LucideIcon; tile: string; label: string; value: string };
@@ -35,10 +36,13 @@ function infoRows(user: AuthCliente): InfoRow[] {
   return rows;
 }
 
-/** Riepilogo delle card dell'account: quante sono, quante attive e i punti del saldo principale di ognuna. */
+/**
+ * Riepilogo delle card dell'account: quante sono, quante attive e i punti di ognuna (contatore punti dell'esercente
+ * emittente, se no il primo): anche una prepagata, che sulla card mostra il credito, può raccogliere punti.
+ */
 function summarize(cards: Card[]) {
   let points = 0;
-  for (const c of cards) if (c.balance?.type === 'points') points += c.balance.amount;
+  for (const c of cards) points += pickCounter(c.counters ?? [], 'points')?.amount ?? 0;
   return { cards: cards.length, active: cards.filter((c) => !c.blocked).length, points };
 }
 

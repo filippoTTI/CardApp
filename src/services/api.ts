@@ -66,6 +66,8 @@ async function request<T extends Envelope>(method: 'GET' | 'POST', path: string,
     return data;
   } catch (e) {
     if (e instanceof ApiError) throw e;
+    // il server è raggiungibile ma non ha risposto entro TIMEOUT_MS: non è un problema di connessione
+    if (controller.signal.aborted) throw new ApiError(-1, 'Il server non ha risposto in tempo, riprova');
     throw new ApiError(-1, 'Server non raggiungibile');
   } finally {
     clearTimeout(timer);

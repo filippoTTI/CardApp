@@ -1,4 +1,4 @@
-import type { CardKind } from '@/types/card';
+import type { CardDiscount, CardKind } from '@/types/card';
 
 export const numberFormat = new Intl.NumberFormat('it-IT');
 export const euroFormat = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' });
@@ -8,8 +8,27 @@ export const CARD_KIND_LABEL: Record<CardKind, string> = {
   prepaid: 'Prepagata',
   postpaid: 'Postpagata',
   standard: 'Standard',
-  gift: 'Gift card',
 };
+
+/**
+ * Nome del contatore euro: sulla postpagata è il saldo (negativo = spesa da saldare), sulle altre
+ * (prepagata, autoricarica) è il credito disponibile.
+ */
+export function euroLabel(kind: CardKind): string {
+  return kind === 'postpaid' ? 'Saldo' : 'Credito';
+}
+
+/** Valore dello sconto della card: percentuale, importo in euro o sconto per tipologia di prodotto. */
+export function formatDiscount(discount: CardDiscount): string {
+  switch (discount.type) {
+    case 'percent':
+      return `${numberFormat.format(discount.amount)}%`;
+    case 'value':
+      return euroFormat.format(discount.amount);
+    case 'category':
+      return 'Su tipologie di prodotti';
+  }
+}
 
 /** yyyyMMdd -> dd/MM/yyyy; undefined se il valore non è una data valida. */
 export function formatDate(value?: string): string | undefined {

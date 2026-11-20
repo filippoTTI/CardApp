@@ -1,6 +1,6 @@
 # CardApp - Documentazione completa
 
-CardApp e' l'app per i clienti degli esercenti: mostra le card fedelta' (saldo punti, contatori, movimenti) di uno o piu' account e genera il QR da esibire in cassa. Ogni account e' legato a un esercente.
+CardApp e' l'app per i clienti degli esercenti: mostra le card fedelta', prepagate e postpagate (credito o punti, sconto, contatori, movimenti) di uno o piu' account e genera il QR da esibire in cassa. Ogni account e' legato a un esercente.
 
 Il documento e' diviso in due parti:
 
@@ -19,10 +19,10 @@ Il documento e' diviso in due parti:
 | Codice esercente | Codice alfanumerico (4-32 caratteri) che identifica l'esercente; si ottiene da QR o link, oppure si digita |
 | Account | Coppia email + esercente. Lo stesso cliente puo' avere piu' account (esercenti diversi o email diverse) |
 | Card | Tessera assegnata al cliente dall'esercente, con codice di 6 caratteri e uno o piu' contatori |
-| Contatore | Saldo associato alla card (oggi l'app gestisce i punti) |
+| Contatore | Valore associato alla card, per card, esercente o circuito. Tipi del gestionale: 0 standard (nessun saldo, non mostrato), 1 euro, 4 punti, 5 sconto (resta a 0: il valore dello sconto sta nel dettaglio della card) |
 | Codice di sblocco | PIN di 4 cifre che protegge l'apertura dell'app |
 
-Tipi di card mostrati: Standard (fedelta'), Prepagata, Postpagata, Gift card. Ogni tipo ha un colore predefinito; se l'esercente ha scelto un colore per la card, vale quello.
+Tipi di card mostrati: Standard (fedelta', anche con autoricarica), Prepagata, Postpagata. Ogni tipo ha un colore predefinito; se l'esercente ha scelto un colore per la card, vale quello.
 
 ## A2. Primo avvio e accesso
 
@@ -101,12 +101,11 @@ La home mostra le card di tutti gli account salvati, raggruppate per account (es
 - In alto a sinistra l'icona profilo, in alto a destra "+" per aggiungere un account.
 
 ### La card
-- Fronte: nome dell'esercente, tipo, saldo (punti) e codice. Un pulsante sulla card apre i dettagli.
+- Fronte: nome dell'esercente, tipo, saldo e codice. Il saldo e' il contatore euro se la card ce l'ha ("Credito", o "Saldo" sulla postpagata), altrimenti i punti ("Punti"); una card con il solo contatore standard non mostra saldo. Un pulsante sulla card apre i dettagli.
 - Toccando la card si gira e mostra il QR del codice card, da far leggere in cassa. Alla comparsa del QR la luminosita' dello schermo sale al massimo (con transizione graduale) e viene ripristinata quando la card si richiude.
 - Una card bloccata mostra la scritta BLOCCATA, ha il bordo rosso e non si gira: il QR non e' disponibile.
 - Le card si inclinano leggermente con il movimento del telefono (effetto parallasse con lo sfondo).
-- Il saldo e' sempre mostrato con l'etichetta "Punti" (l'app gestisce solo i contatori a punti), anche per prepagata, postpagata e gift card.
-- Colori: standard verde, prepagata azzurro, postpagata viola, gift card oro; se l'esercente ha scelto un colore vale quello (la card bloccata di prova e' rossa perche' il suo dettaglio ha quel colore).
+- Colori: standard verde, prepagata azzurro, postpagata viola; se l'esercente ha scelto un colore vale quello (la card bloccata di prova e' rossa perche' il suo dettaglio ha quel colore).
 
 Elenco card (account con card di tipo diverso e una bloccata):
 
@@ -125,9 +124,9 @@ Card girata con il QR da mostrare in cassa:
 
 Aprendo i dettagli:
 
-- **Saldi e contatori**: un riquadro per ogni contatore. Il tipo determina etichetta e formato: Saldo (euro), Punti, Sconto (percentuale), Card standard ("Nessun saldo"), Contatore (altro). Viene indicato l'esercente o il circuito a cui appartiene il contatore e l'eventuale limite.
+- **Saldi e contatori**: prima i contatori euro ("Credito", o "Saldo" sulla postpagata), poi i punti, il contatore dell'esercente emittente per primo; sotto l'etichetta l'esercente o il circuito, a destra valore ed eventuale limite. I contatori standard e sconto non si mostrano; se la card fa uno sconto c'e' una riga "Sconto" con il valore del dettaglio (percentuale, euro o "Su tipologie di prodotti"). Un tipo sconosciuto compare come "Contatore". Senza righe la sezione non c'e'.
 - **Informazioni**: codice, tipo, stato (Attiva/Bloccata), emessa da (con citta'), riferimento, note, card master, data di inserimento, ultimo utilizzo. Compaiono solo le righe valorizzate.
-- **Movimenti**: elenco dal piu' recente a pagine da 20; "mostra altri" carica la pagina successiva. Tipi: Ricarica, Spesa, Accredito. Per ogni movimento: data/ora, importo con segno, saldo dopo, descrizione, documento, esercente, circuito, e le righe di dettaglio (descrizione, quantita', totale). Al primo caricamento compaiono righe segnaposto.
+- **Movimenti**: elenco dal piu' recente a pagine da 20; "mostra altri" carica la pagina successiva. Tipi: Ricarica, Spesa, Accredito. Per ogni movimento: data/ora, importo con segno e saldo dopo (euro o punti; per i movimenti dei contatori standard e sconto invece il totale dello scontrino, se c'e'), descrizione, documento, esercente, circuito, e le righe di dettaglio (descrizione, quantita', totale). Al primo caricamento compaiono righe segnaposto.
 - **Blocca card / Sblocca card**: il blocco chiede conferma ("La card non potra' essere usata finche' non la sblocchi"), lo sblocco e' immediato. Se la card era gia' nello stato richiesto, un avviso lo comunica.
 - Tirando verso il basso si aggiornano card e movimenti.
 - Toccando un movimento si espande e mostra l'esercente, il documento e le righe (quantita', articolo, totale in euro).
@@ -142,7 +141,7 @@ Aprendo i dettagli:
 
 Mostra i dati dell'account in uso:
 - Avatar con iniziali, nome e cognome.
-- Riepilogo: numero di card, card attive, punti totali (somma dei saldi punti). Finche' le card non sono arrivate i valori sono "-".
+- Riepilogo: numero di card, card attive, punti totali (somma, per ogni card, del contatore punti dell'esercente emittente o del primo contatore punti). Finche' le card non sono arrivate i valori sono "-".
 - Esercente, email, telefono (se presente).
 - **Esci** (icona in alto a destra): chiede conferma ("Resta salvato su questo telefono: dal login potrai rientrare con Face ID o impronta") e riporta al login senza dimenticare l'account.
 - **Lista account** (compare con piu' account salvati): tocco su una riga per passare a quell'account; chiave per il recupero password; "-" rosso per toglierlo dal telefono.
@@ -413,11 +412,12 @@ Altri context: `parallax` (inclinazione del telefono), `background-focus`, `skel
 Tutte le risposte hanno la busta `{cod, msg}`. Il token cliente scade dopo 5 minuti.
 
 ### Mappatura card (`services/cards.ts`)
-- `tipo` del gestionale (`CARDDETTAGLIO`): `Standard`, `PrePagata`, `PostPagata`, `GiftCard` -> `standard | prepaid | postpaid | gift`; qualsiasi altro valore o assenza di dettaglio = standard.
-- Contatori: `tipoContatore === 0` = punti, altrimenti `other`. `tipoAssociazione`: 0 card, 1 esercente, 2 circuito.
-- Saldo mostrato sulla card: i punti del contatore `principale` (esercente emittente), altrimenti il primo contatore a punti.
+- `tipo` del gestionale (`CARDDETTAGLIO`): `Standard`, `PrePagata`, `PostPagata` -> `standard | prepaid | postpaid`; qualsiasi altro valore o assenza di dettaglio = standard.
+- Contatori (`TIPI_CONTATORE`): `tipoContatore` 0 `standard`, 1 `euro`, 4 `points`, 5 `discount`, altrimenti `other`; `principale` -> `main`. `tipoAssociazione`: 0 card, 1 esercente, 2 circuito.
+- Saldo mostrato sulla card (`pickBalance`): il contatore euro, altrimenti quello a punti; per ognuno il `principale` (esercente emittente), altrimenti il primo (`pickCounter`). Lo standard non e' mai un saldo.
+- Sconto: `tipoSconto` (`Percentuale | Valore | Tipologia`) e `sconto` della card -> `discount` (`percent | value | category`); assente se non attivo.
 - Date: `dataInserimento` `yyyyMMdd`, `ultimoUtilizzo` `yyyyMMddHHmmss` (si tengono i primi 8 caratteri); movimenti `yyyy-MM-ddTHH:mm:ss`.
-- Movimenti: `ricarica | spesa | accredito` -> `recharge | expense | credit`. I nomi dei contatori `standard | euro | punti | sconto` sono mappati su `CounterType`.
+- Movimenti: `ricarica | spesa | accredito` -> `recharge | expense | credit`. I nomi dei contatori `standard | euro | punti | sconto` sono mappati su `CounterType`; `totaleDocumento` -> `documentTotal`.
 - Se l'emittente non e' valorizzato si usa la ragione sociale dell'account.
 
 ### QR della card
@@ -427,7 +427,7 @@ Tutte le risposte hanno la busta `{cod, msg}`. Il token cliente scade dopo 5 min
 Con almeno un QR visibile la luminosita' sale a 1 con rampa di 450 ms (passi da 30 ms, ease-out) e torna al valore originale alla chiusura dell'ultimo QR. Il valore originale viene dimenticato solo a discesa finita. Modulo `expo-brightness` opzionale.
 
 ### Colori card (`constants/card-color.ts`, `components/ui/flip-card.tsx`)
-Il colore scelto dall'esercente (`CARDDETTAGLIO.Colore`, es. `#1f4634`, formato `#RGB` o `#RRGGBB`) ha la precedenza e genera una palette (`CardPalette`) per sfondo, curve, testi, riquadro QR, bordo, ombra. Se non valido vale la palette del tipo (prepagata azzurro, postpagata viola-orchidea, standard verde, gift oro, con varianti chiara/scura). La card e' disegnata in SVG su un viewBox 340x214; il flip e' una rotazione Y con prospettiva.
+Il colore scelto dall'esercente (`CARDDETTAGLIO.Colore`, es. `#1f4634`, formato `#RGB` o `#RRGGBB`) ha la precedenza e genera una palette (`CardPalette`) per sfondo, curve, testi, riquadro QR, bordo, ombra. Se non valido vale la palette del tipo (prepagata azzurro, postpagata viola-orchidea, standard verde, con varianti chiara/scura). La card e' disegnata in SVG su un viewBox 340x214; il flip e' una rotazione Y con prospettiva.
 
 ## B9. Componenti principali (`src/components/ui`)
 
@@ -496,6 +496,6 @@ Log: gli errori dei moduli opzionali (`[brightness]`, `[camera]`, `[biometric]`)
 
 - Le cartelle native sono generate: non modificarle a mano.
 - Il formato del QR card e' centralizzato in `services/qr.ts`; il formato del QR esercente in `services/esercente-qr.ts`.
-- Nuovi tipi di contatore (oggi solo punti) vanno aggiunti in `services/cards.ts` (`counterType`, `COUNTER_TYPES`) e in `formatCounter` di `card-details.tsx`.
+- Nuovi tipi di contatore vanno aggiunti in `services/cards.ts` (`TIPI_CONTATORE`, `COUNTER_TYPES`) e in `counterRows`/`COUNTER_ORDER` di `card-details.tsx`.
 - Nuovi tipi di card: `CardKind` in `types/card.ts`, `KINDS` in `services/cards.ts`, `CARD_KIND_LABEL` in `constants/format.ts`, palette in `flip-card`.
 - Il percorso `(app)/recupera-password.tsx` riesporta `forgot-password`, cosi' la stessa schermata e' raggiungibile anche da loggati.
