@@ -13,7 +13,7 @@ import { MISSING_CODE_MESSAGE, useEsercenteCode } from '@/hooks/use-esercente-co
 import { useFormErrors } from '@/hooks/use-form-errors';
 import { useTheme } from '@/hooks/use-theme';
 import { accountKey, getLastKey, listAccounts, type SavedAccount } from '@/services/accounts';
-import { errorMessage, isTransientError } from '@/services/api';
+import { errorMessage, isPolicyRejection, isTransientError } from '@/services/api';
 import { forgetAccount, signInWithPassword, switchAccount } from '@/services/auth';
 import { authenticateDevice } from '@/services/biometric';
 
@@ -52,7 +52,7 @@ export default function LoginScreen() {
   const dots: Page[] = pages.filter((p) => p !== 'account');
 
   const onError = (e: unknown) => {
-    setRejected(!isTransientError(e));
+    setRejected(!isTransientError(e) && !isPolicyRejection(e));
     fail(page === 'credenziali' ? 'password' : 'account', errorMessage(e));
   };
 
@@ -70,6 +70,8 @@ export default function LoginScreen() {
       signIn(cliente);
     } catch (e) {
       if (isTransientError(e)) return fail('account', errorMessage(e));
+      // account non più abilitato dall'esercente: la password non c'entra, si mostra il motivo del server
+      if (isPolicyRejection(e)) return fail('account', errorMessage(e));
       esercente.setCode(a.codEsercente, a.ragioneSociale);
       setEmail(a.email);
       setPassword('');

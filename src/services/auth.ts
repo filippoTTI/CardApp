@@ -21,7 +21,7 @@ export type AuthSession = {
 
 type LoginResponse = Envelope & { token: string; idCliente: number };
 type VerificaResponse = Envelope & { idCliente: number; nome: string | null; cognome: string | null; email: string | null; cel: string | null; codEsercente: string };
-type InfoEsercenteResponse = Envelope & { codEsercente: string; ragioneSociale: string | null; citta: string | null };
+type InfoEsercenteResponse = Envelope & { codEsercente: string; ragioneSociale: string | null; citta: string | null; scuola?: boolean | null; domini?: string[] | null };
 type RegistraResponse = Envelope & { idCliente: number; emailDaConfermare: boolean };
 
 /** Sessione corrente (token cloud dell'account attivo); le credenziali stanno negli account salvati. */
@@ -39,10 +39,14 @@ function loginRequest(acc: Pick<SavedAccount, 'codEsercente' | 'email'>, passwor
   return cloudPost<LoginResponse>('/AUC/LoginCliente', { CodEsercente: acc.codEsercente, User: acc.email, PWD: password });
 }
 
+/** Dati pubblici di un esercente; `scuola` e `domini` (senza @) sono valorizzati solo se il cloud li fornisce. */
+export type EsercenteInfo = { codEsercente: string; ragioneSociale: string; scuola: boolean; domini: string[] };
+
 /** Ragione sociale di un esercente a partire dal suo codice; solleva ApiError se il codice non è valido. */
-export async function fetchEsercente(codEsercente: string): Promise<{ codEsercente: string; ragioneSociale: string }> {
+export async function fetchEsercente(codEsercente: string): Promise<EsercenteInfo> {
   const res = await cloudGet<InfoEsercenteResponse>(`/CLE/InfoEsercente/${encodeURIComponent(codEsercente.trim())}`);
-  return { codEsercente: res.codEsercente, ragioneSociale: res.ragioneSociale?.trim() || 'Esercente' };
+  const domini = (res.domini ?? []).map((d) => d.trim().replace(/^@/, '').toLowerCase()).filter(Boolean);
+  return { codEsercente: res.codEsercente, ragioneSociale: res.ragioneSociale?.trim() || 'Esercente', scuola: res.scuola === true, domini };
 }
 
 /** Login sul cloud con le credenziali dell'account e lettura del profilo; imposta la sessione corrente. */

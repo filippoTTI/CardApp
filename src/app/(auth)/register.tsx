@@ -26,8 +26,11 @@ function validateProfile(cognome: string): [Field, string] | null {
 }
 
 /** Controlli del passo "accesso", fatti prima di chiamare il server. */
-function validateAccess(email: string, password: string): [Field, string] | null {
+function validateAccess(email: string, password: string, domini: string[]): [Field, string] | null {
   if (!EMAIL_PATTERN.test(email.trim())) return ['email', 'Inserisci un indirizzo email valido'];
+  // modalità scuola: solo i domini dell'esercente (il controllo vero resta sul server)
+  const dominio = email.trim().toLowerCase().split('@').pop() ?? '';
+  if (domini.length > 0 && !domini.some((d) => dominio === d || dominio.endsWith(`.${d}`))) return ['email', `Per registrarti usa la tua email istituzionale (${domini.map((d) => `@${d}`).join(', ')})`];
   if (password.length < MIN_PASSWORD_LENGTH) return ['password', `La password deve avere almeno ${MIN_PASSWORD_LENGTH} caratteri`];
   if (/^\s|\s$/.test(password)) return ['password', 'La password non può iniziare o finire con uno spazio'];
   return null;
@@ -74,7 +77,7 @@ export function RegisterScreen({ embedded = false }: { embedded?: boolean }) {
   const onRegister = async () => {
     if (busy) return;
     if (!esercente.codeValid) return fail('password', MISSING_CODE_MESSAGE);
-    const invalid = validateAccess(email, password);
+    const invalid = validateAccess(email, password, esercente.info?.domini ?? []);
     if (invalid) return fail(...invalid);
     setBusy(true);
     try {
@@ -88,7 +91,9 @@ export function RegisterScreen({ embedded = false }: { embedded?: boolean }) {
       signIn(cliente);
       if (embedded) close();
     } catch (e) {
-      fail('password', errorMessage(e));
+      // errori sull'indirizzo (dominio non ammesso, email non valida o bloccata) vanno sotto il campo email
+      const msg = errorMessage(e);
+      fail(/email|dominio/i.test(msg) ? 'email' : 'password', msg);
     } finally {
       setBusy(false);
     }
@@ -110,7 +115,10 @@ export function RegisterScreen({ embedded = false }: { embedded?: boolean }) {
   const titles = {
     esercente: ["Scegli l'esercente", 'Scansiona il QR o inserisci il codice'],
     profilo: ['Crea account', esercente.linkName ? `Registrati presso ${esercente.linkName}` : 'Dicci chi sei'],
-    accesso: ['Le tue credenziali', 'Ti serviranno per accedere'],
+    accesso: [
+      'Le tue credenziali',
+      esercente.info?.scuola ? (esercente.info.domini.length ? `Usa la tua email istituzionale (${esercente.info.domini.map((d) => `@${d}`).join(', ')})` : 'Usa la tua email istituzionale') : 'Ti serviranno per accedere',
+    ],
   } as const;
 
   return (

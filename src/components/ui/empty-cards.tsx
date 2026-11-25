@@ -69,7 +69,7 @@ export function EmptyCards() {
       <Animated.View entering={FadeInDown.delay(300).duration(550)} style={styles.texts}>
         <Text style={[styles.title, { color: t.text }]}>Nessuna card</Text>
         <Text style={[styles.subtitle, { color: t.textSecondary }]}>
-          Le tue card compariranno qui, con saldo e codice QR, non appena ti verranno assegnate.
+          La tua card verrà creata a breve e comparirà qui, con saldo e codice QR. Tira giù per aggiornare.
         </Text>
       </Animated.View>
     </View>

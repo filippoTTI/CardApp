@@ -33,6 +33,17 @@ export type Envelope = { cod: number; msg?: string };
 /** Messaggi tecnici del server (database, eccezioni .NET) che non vanno mostrati al cliente: diventano un avviso generico. */
 const TECHNICAL_MESSAGE = /unable to complete network request|error code \d+|firebird|sqlstate|violation of|exception|stack ?trace|object reference|\bat \w+\.\w+\(/i;
 
+/** Messaggi del cloud che indicano un'indisponibilità passeggera (arrivano anche con HTTP 200): errore temporaneo, non un verdetto sulle credenziali. */
+const TRANSIENT_MESSAGE = /momentaneamente non disponibile|riprova tra qualche minuto/i;
+
+/** Rifiuto per le regole dell'esercente (modalità scuola: account non abilitato, email bloccata, dominio non ammesso). */
+const POLICY_MESSAGE = /non abilitato|bloccata|istituzionale|dominio email/i;
+
+/** Il cloud ha rifiutato l'account per le regole dell'esercente: non serve reinviare la conferma né cambiare password. */
+export function isPolicyRejection(e: unknown): boolean {
+  return e instanceof ApiError && !isTransientError(e) && POLICY_MESSAGE.test(e.message);
+}
+
 const TECHNICAL_FALLBACK = 'Servizio temporaneamente non disponibile, riprova più tardi';
 
 async function request<T extends Envelope>(method: 'GET' | 'POST', path: string, body?: unknown, accessToken?: string): Promise<T> {
@@ -61,6 +72,7 @@ async function request<T extends Envelope>(method: 'GET' | 'POST', path: string,
     if (data.cod !== 0) {
       // un guasto del server (database non raggiungibile, eccezione) non è un verdetto sulle credenziali: conta come errore temporaneo
       if (data.msg && TECHNICAL_MESSAGE.test(data.msg)) throw new ApiError(-1, TECHNICAL_FALLBACK, res.status);
+      if (data.msg && TRANSIENT_MESSAGE.test(data.msg)) throw new ApiError(-1, data.msg, res.status);
       throw new ApiError(data.cod, data.msg || 'Errore', res.status);
     }
     return data;

@@ -15,14 +15,33 @@ type CameraModule = typeof import('expo-camera');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const camera = optionalNative('camera', () => require('expo-camera') as CameraModule)();
 
+type ScannerProps = {
+  visible: boolean;
+  onClose: () => void;
+  onCode: (code: string) => void;
+  /** Estrae il codice dal testo del QR (null se non è un QR atteso). Predefinito: QR dell'esercente. */
+  parse?: (data: string) => string | null;
+  /** Testo sotto l'inquadratura. */
+  hint?: string;
+  /** Avviso quando il QR letto non è quello atteso. */
+  invalidHint?: string;
+};
+
 /**
- * Fotocamera integrata a schermo intero per leggere il QR dell'esercente (`cardapp://e/<codice>`).
+ * Fotocamera integrata a schermo intero per leggere un QR: per impostazione predefinita quello dell'esercente
+ * (`cardapp://e/<codice>`), oppure un altro con `parse` (es. il pagamento in cassa, `cardapp://pay/<id>`).
  * Alla prima lettura valida chiama `onCode` con il codice; il chiamante chiude lo scanner.
  */
-export function QrScanner({ visible, onClose, onCode }: { visible: boolean; onClose: () => void; onCode: (code: string) => void }) {
+export function QrScanner({ visible, onClose, onCode, parse = parseEsercenteCode, hint, invalidHint }: ScannerProps) {
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose} statusBarTranslucent>
-      <SafeAreaProvider>{camera ? <ScannerBody onClose={onClose} onCode={onCode} /> : <Unavailable onClose={onClose} />}</SafeAreaProvider>
+      <SafeAreaProvider>
+        {camera ? (
+          <ScannerBody onClose={onClose} onCode={onCode} parse={parse} hint={hint} invalidHint={invalidHint} />
+        ) : (
+          <Unavailable onClose={onClose} />
+        )}
+      </SafeAreaProvider>
     </Modal>
   );
 }
@@ -52,7 +71,7 @@ function Unavailable({ onClose }: { onClose: () => void }) {
   );
 }
 
-function ScannerBody({ onClose, onCode }: { onClose: () => void; onCode: (code: string) => void }) {
+function ScannerBody({ onClose, onCode, parse, hint: idleHint, invalidHint }: Omit<ScannerProps, 'visible'> & { parse: (data: string) => string | null }) {
   const t = useTheme();
   const { CameraView, useCameraPermissions } = camera as CameraModule;
   const [permission, requestPermission] = useCameraPermissions();
@@ -64,13 +83,13 @@ function ScannerBody({ onClose, onCode }: { onClose: () => void; onCode: (code: 
 
   const onScanned = ({ data }: { data: string }) => {
     if (handled.current) return;
-    const code = parseEsercenteCode(data);
+    const code = parse(data);
     if (code) {
       handled.current = true;
       onCode(code);
       return;
     }
-    setHint('Questo QR non è di un esercente CardApp');
+    setHint(invalidHint ?? 'Questo QR non è di un esercente CardApp');
     clearTimeout(hintTimer.current);
     hintTimer.current = setTimeout(() => setHint(undefined), 2500);
   };
@@ -107,7 +126,7 @@ function ScannerBody({ onClose, onCode }: { onClose: () => void; onCode: (code: 
       <SafeAreaView style={styles.overlay} pointerEvents="box-none">
         <CloseButton onClose={onClose} />
         <View style={styles.bottom} pointerEvents="none">
-          <Text style={styles.hint}>{hint ?? "Inquadra il QR dell'esercente"}</Text>
+          <Text style={styles.hint}>{hint ?? idleHint ?? "Inquadra il QR dell'esercente"}</Text>
         </View>
       </SafeAreaView>
     </View>

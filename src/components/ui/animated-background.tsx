@@ -86,33 +86,13 @@ function BlobView({ blob, clock, width, height }: { blob: Blob; clock: SharedVal
   );
 }
 
-type Dot = { x: number; size: number; speed: 1 | 2 | 3; offset: number; sway: number };
-const DOTS: Dot[] = Array.from({ length: 10 }, (_, i) => ({
-  x: ((i * 0.6180339) % 1) * 0.92 + 0.04,
-  size: 1.5 + ((i * 7) % 4) * 0.8,
-  speed: ((i % 3) + 1) as 1 | 2 | 3,
-  offset: (i * 0.37) % 1,
-  sway: 8 + (i % 5) * 5,
-}));
-
-function DotView({ dot, clock, width, height, rgb }: {
-  dot: Dot; clock: SharedValue<number>; width: number; height: number; rgb: RGB;
-}) {
-  // f va 0→1 e poi ricomincia mentre il punto è invisibile (opacità 0 agli estremi): nessuno stacco.
-  const f = useDerivedValue(() => ((clock.value / CYCLE_MS) * dot.speed + dot.offset) % 1);
-  const cx = useDerivedValue(() => dot.x * width + Math.sin(f.value * TWO_PI) * dot.sway);
-  const cy = useDerivedValue(() => height * (1.05 - f.value * 1.1));
-  const opacity = useDerivedValue(() => Math.sin(f.value * Math.PI) * 0.9);
-  return <Circle cx={cx} cy={cy} r={dot.size} color={rgba(rgb, 1)} opacity={opacity} />;
-}
-
-type Props = { variant?: 'soft' | 'rich' };
+/** `calm`: solo le macchie di base, a intensità ridotta e con un velo più marcato (sfondo che non compete con i contenuti). */
+type Props = { variant?: 'soft' | 'rich' | 'calm' };
 
 /**
  * Sfondo animato soft, disegnato con Skia (nessun file video):
  *  1. macchie di colore sfumate che orbitano lentamente
  *  2. (variante `rich`) macchie extra più grandi e luminose, che si sovrappongono
- *  3. piccole particelle che salgono e brillano
  *
  * LOOP SENZA STACCO: non usa animazioni che ripartono (withRepeat). Un unico orologio cresce
  * all'infinito e ogni movimento è una funzione periodica con numero INTERO di giri per ciclo
@@ -150,8 +130,10 @@ export function AnimatedBackground({ variant = 'soft' }: Props) {
   const focus = useBackgroundFocus();
   const focusStyle = useAnimatedStyle(() => ({ opacity: focus.amount.value }));
 
-  const blobs = [...(dark ? BASE_DARK : BASE_LIGHT), ...(variant === 'rich' ? (dark ? EXTRA_DARK : EXTRA_LIGHT) : [])];
-  const dotColor: RGB = dark ? [190, 255, 220] : [22, 163, 74];
+  const calm = variant === 'calm';
+  const blobs = [...(dark ? BASE_DARK : BASE_LIGHT), ...(variant === 'rich' ? (dark ? EXTRA_DARK : EXTRA_LIGHT) : [])].map((b) =>
+    calm ? { ...b, alpha: b.alpha * 0.5 } : b,
+  );
 
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: t.background }]}>
@@ -161,9 +143,6 @@ export function AnimatedBackground({ variant = 'soft' }: Props) {
           {blobs.map((b, i) => (
             <BlobView key={`b${i}`} blob={b} clock={clock} width={width} height={height} />
           ))}
-          {DOTS.map((d, i) => (
-            <DotView key={`d${i}`} dot={d} clock={clock} width={width} height={height} rgb={dotColor} />
-          ))}
         </Canvas>
       </Animated.View>
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, focusStyle]}>
@@ -171,7 +150,7 @@ export function AnimatedBackground({ variant = 'soft' }: Props) {
         <View style={[StyleSheet.absoluteFill, { backgroundColor: dark ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.22)' }]} />
       </Animated.View>
       {/* velo leggero sopra lo sfondo: più contrasto per card e contenuti */}
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: dark ? 'rgba(0,0,0,0.28)' : 'rgba(6,40,22,0.12)' }]} />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: dark ? 'rgba(0,0,0,0.28)' : calm ? 'rgba(255,255,255,0.35)' : 'rgba(6,40,22,0.12)' }]} />
     </View>
   );
 }

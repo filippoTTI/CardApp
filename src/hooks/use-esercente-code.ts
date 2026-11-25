@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { listAccounts } from '@/services/accounts';
 import { errorMessage } from '@/services/api';
-import { fetchEsercente } from '@/services/auth';
+import { fetchEsercente, type EsercenteInfo } from '@/services/auth';
 
 /**
  * Esercente delle schermate di accesso. Con un link/QR (`cod`) il codice non viene mai mostrato e il suo nome, preso dal server,
@@ -15,6 +15,7 @@ export function useEsercenteCode(cod: string | undefined, mode: 'always' | 'firs
   const [hasAccounts, setHasAccounts] = useState<boolean | null>(mode === 'always' ? false : null);
   const [code, setCode] = useState('');
   const [name, setName] = useState<string>();
+  const [info, setInfo] = useState<EsercenteInfo>();
 
   useEffect(() => {
     if (mode === 'always') return;
@@ -32,7 +33,10 @@ export function useEsercenteCode(cod: string | undefined, mode: 'always' | 'firs
     let active = true;
     fetchEsercente(cod)
       .then((e) => {
-        if (active) setLinkName(e.ragioneSociale);
+        if (active) {
+          setLinkName(e.ragioneSociale);
+          setInfo(e);
+        }
       })
       .catch((e) => {
         if (active) setLinkError(errorMessage(e));
@@ -42,6 +46,23 @@ export function useEsercenteCode(cod: string | undefined, mode: 'always' | 'firs
     };
   }, [cod]);
 
+  // codice digitato o scelto e già verificato: servono i dati dell'esercente (modalità scuola, domini)
+  const typed = !cod && name !== undefined ? code : undefined;
+  useEffect(() => {
+    if (!typed) return;
+    let active = true;
+    fetchEsercente(typed)
+      .then((e) => {
+        if (active) setInfo(e);
+      })
+      .catch(() => {
+        // le informazioni sono facoltative: senza, la registrazione funziona come sempre
+      });
+    return () => {
+      active = false;
+    };
+  }, [typed]);
+
   const needsCode = !cod && hasAccounts === false;
 
   return {
@@ -49,6 +70,8 @@ export function useEsercenteCode(cod: string | undefined, mode: 'always' | 'firs
     linkName,
     /** Errore nella lettura dell'esercente del link/QR. */
     linkError,
+    /** Dati dell'esercente (modalità scuola e domini ammessi), se già letti dal server per il codice in uso. */
+    info: info && info.codEsercente.toUpperCase() === (cod ?? code).trim().toUpperCase() ? info : undefined,
     /** Il campo del codice va mostrato. */
     needsCode,
     /** Codice da usare per le chiamate (quello del link o quello digitato). */
