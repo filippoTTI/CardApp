@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "CardApp",
+    "name": "ThinkCard",
     "slug": "cardapp",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -26,7 +26,12 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
       ],
-      "package": "com.cardapp.app"
+      "package": "com.cardapp.app",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ]
     },
     "web": {
       "output": "static",
@@ -71,6 +76,12 @@
         "projectId": "0069429e-2eb0-4d13-8894-a3a4af5d8428"
       }
     },
-    "owner": "filippoian"
+    "owner": "filippoian",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/0069429e-2eb0-4d13-8894-a3a4af5d8428"
+    }
   }
 }
