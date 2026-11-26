@@ -10,15 +10,24 @@
       "ios": {
         "simulator": false
       },
-      "channel": "development"
+      "channel": "development",
+      "env": {
+        "EXPO_PUBLIC_CLOUD_URL": "https://wsclienticloudtest.skyoneserver.it"
+      }
     },
     "preview": {
       "distribution": "internal",
-      "channel": "preview"
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_CLOUD_URL": "https://wsclienticloudtest.skyoneserver.it"
+      }
     },
     "production": {
       "autoIncrement": true,
-      "channel": "production"
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_CLOUD_URL": "https://wsclienticloud.skyoneserver.it"
+      }
     }
   },
   "submit": {
